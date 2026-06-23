@@ -254,3 +254,11 @@ D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\
 ```
 
 当前 Conda ffmpeg build 不包含 `ass/subtitles` filter，所以 `render_video.py` 会自动 fallback 到 `drawtext`。
+
+## 许可证
+
+本项目使用 MIT License。详情见 [LICENSE](LICENSE)。
+
+本仓库不包含、也不授予任何第三方模型权重、媒体文件、字体或二进制文件的使用权。用户需要自行确保其使用的所有第三方组件和源素材符合相应许可证与服务条款。
+
+自动生成的转写、翻译和字幕可能包含错误。在专业、商业、法律、医疗、教育或公开使用前，应先进行人工审核。

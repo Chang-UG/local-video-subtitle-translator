@@ -254,3 +254,15 @@ D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\
 ```
 
 The current Conda ffmpeg build does not include the `ass/subtitles` filter, so `render_video.py` automatically falls back to `drawtext`.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+This repository does not include or grant rights to third-party model weights,
+media files, fonts, or binaries. Users are responsible for complying with the
+licenses and terms of all third-party components and source materials they use.
+
+Generated transcripts, translations, and subtitles may contain errors and should
+be reviewed before professional, commercial, legal, medical, educational, or
+public use.
