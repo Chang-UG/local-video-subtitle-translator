@@ -1,5 +1,5 @@
 param(
-    [string]$Name = "Transcripting-MVP",
+    [string]$Name = "Local-Video-Subtitle-Translator-MVP",
     [switch]$IncludeModel
 )
 
@@ -41,7 +41,7 @@ foreach ($file in $scriptFiles) {
     Copy-Item -LiteralPath (Join-Path $root "scripts\$file") -Destination (Join-Path $staging "scripts")
 }
 
-foreach ($dir in @("input", "output", "transcript", "audio", "dub", "models")) {
+foreach ($dir in @("input", "output", "transcript", "models")) {
     New-Item -ItemType Directory -Path (Join-Path $staging $dir) | Out-Null
 }
 
@@ -54,6 +54,30 @@ if ($IncludeModel) {
 if (Test-Path $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }
-Compress-Archive -LiteralPath $staging -DestinationPath $zipPath
+
+$python = "python"
+if (Test-Path "D:\anaconda3\envs\vibecoding\python.exe") {
+    $python = "D:\anaconda3\envs\vibecoding\python.exe"
+}
+
+$zipScript = Join-Path $root "_dist\build_zip.py"
+@"
+import sys
+from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
+
+staging = Path(sys.argv[1])
+zip_path = Path(sys.argv[2])
+with ZipFile(zip_path, "w", ZIP_DEFLATED) as archive:
+    for path in staging.rglob("*"):
+        if path.is_file():
+            archive.write(path, path.relative_to(staging.parent))
+"@ | Set-Content -LiteralPath $zipScript -Encoding UTF8
+
+& $python $zipScript $staging $zipPath
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+Remove-Item -LiteralPath $zipScript -Force
 
 Write-Host "Wrote $zipPath"

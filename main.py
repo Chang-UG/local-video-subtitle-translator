@@ -330,7 +330,7 @@ class PipelineGui:
 
     def __init__(self) -> None:
         self.root = Tk()
-        self.root.title("Transcripting")
+        self.root.title("Local Video Subtitle Translator")
         self.root.geometry("1180x760")
         self.root.minsize(1040, 680)
         self.root.configure(bg="#101317")
@@ -391,7 +391,7 @@ class PipelineGui:
 
         header = ttk.Frame(self.root, padding=(22, 18, 22, 8))
         header.grid(row=0, column=0, columnspan=2, sticky="ew")
-        ttk.Label(header, text="Transcripting", style="Title.TLabel").pack(side="left")
+        ttk.Label(header, text="Local Video Subtitle Translator", style="Title.TLabel").pack(side="left")
         ttk.Label(header, textvariable=self.status).pack(side="right")
 
         controls = ttk.Frame(self.root, style="Panel.TFrame", padding=16)

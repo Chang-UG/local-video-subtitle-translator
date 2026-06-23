@@ -1,4 +1,4 @@
-# Transcripting Distributable MVP
+# Local Video Subtitle Translator Distributable MVP
 
 This is the smallest practical packaging target for sharing the app with another Windows user.
 
@@ -19,7 +19,7 @@ Keep:
 
 Do not include yet:
 
-- Chinese dubbing / voice replacement
+- voice-over generation / voice replacement
 - speaker separation
 - app-store-style installer
 - one-file executable
@@ -29,7 +29,7 @@ Do not include yet:
 ## Recommended MVP Distribution Shape
 
 ```text
-Transcripting-MVP/
+Local-Video-Subtitle-Translator-MVP/
 |-- main.py
 |-- README.md
 |-- DISTRIBUTION_MVP.md
@@ -49,8 +49,6 @@ Transcripting-MVP/
 |-- input/
 |-- output/
 |-- transcript/
-|-- audio/
-|-- dub/
 ```
 
 ## Runtime Assumptions
@@ -65,7 +63,7 @@ The MVP should work on CPU, but GPU translation and future GPU transcription dep
 
 ## First-Run Flow For User
 
-1. Unzip `Transcripting-MVP`.
+1. Unzip `Local-Video-Subtitle-Translator-MVP`.
 2. Double-click `install_env.bat`.
 3. Put the GGUF model in `models/` if it is not bundled.
 4. Double-click `run_gui.bat`.

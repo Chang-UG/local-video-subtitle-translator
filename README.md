@@ -1,6 +1,6 @@
-# Transcripting
+# Local Video Subtitle Translator
 
-Video dubbing pipeline workspace. We are building it one step at a time.
+A local-first tool for transcribing videos, translating subtitles into Chinese, reviewing the translated text, and burning Chinese or bilingual subtitles into the final video.
 
 Current MVP:
 
@@ -9,7 +9,7 @@ audio/video file
 -> faster-whisper
 -> transcript text
 -> srt subtitles
--> segment json for later translation and dubbing
+-> segment json for aligned translation review
 -> local llama.cpp translation
 -> burned-in Chinese or bilingual subtitles
 ```
@@ -17,30 +17,23 @@ audio/video file
 ## Project Layout
 
 ```text
-video_dubbing_project/
+local_video_subtitle_translator/
 +-- input/
-+-- audio/
-|   +-- speakers/
++-- models/
 +-- transcript/
-+-- dub/
 +-- output/
 +-- scripts/
 +-- main.py
 ```
 
-Expected later outputs:
+Typical outputs:
 
-- `audio/original.wav`
-- `audio/no_vocals.wav`
-- `audio/speakers/speaker_00_reference.wav`
-- `transcript/transcript_en.json`
-- `transcript/transcript_zh.json`
-- `transcript/bilingual.srt`
-- `transcript/bilingual.ass`
-- `dub/00001.wav`
-- `dub/merged_zh.wav`
-- `output/lecture_bilingual_subs.mp4`
-- `output/lecture_zh_dubbed.mp4`
+- `output/lecture/lecture.segments.json`
+- `output/lecture/lecture.zh.json`
+- `output/lecture/lecture.bilingual.txt`
+- `output/lecture/lecture.bilingual.srt`
+- `output/lecture/lecture.bilingual.ass`
+- `output/lecture/lecture_bilingual_subs.mp4`
 
 ## Environment
 
@@ -168,15 +161,13 @@ Outputs:
 - `transcript/lecture.zh.json`
 - `transcript/lecture.bilingual.txt`
 
-The bilingual TXT keeps each source segment and its Chinese translation together. It is for review and later dubbing work, not for final styled subtitles.
+The bilingual TXT keeps each source segment and its Chinese translation together. It is for review, not for final styled subtitles.
 
-The rest of the pipeline should stay local where practical:
+The subtitle pipeline stays local where practical:
 
 - Subtitle generation: Python scripts.
 - Styled subtitle burn-in: ffmpeg with ASS/libass.
-- Audio extraction and final muxing: ffmpeg.
-- Voice/background separation: local tools such as Demucs or UVR-style models.
-- TTS/dubbing: local TTS where possible.
+- Translation: local `llama-cli` with a GGUF model.
 
 ## Subtitle Format
 
@@ -196,7 +187,7 @@ Dialogue: 0,0:00:00.00,0:00:03.00,Source,,0,0,0,,Original line
 Dialogue: 0,0:00:00.00,0:00:03.00,Chinese,,0,0,0,,Chinese translation line
 ```
 
-## One-Step Bilingual Burn-In
+## One-Step Subtitle Burn-In
 
 Run the full local pipeline on a source video:
 
