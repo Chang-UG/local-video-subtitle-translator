@@ -1,22 +1,22 @@
-# Local Video Subtitle Translator
+# 本地视频字幕翻译工具
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A local-first tool for transcribing videos, translating subtitles into Chinese, reviewing the translated text, and burning Chinese or bilingual subtitles into the final video.
+一个本地优先的视频字幕工具：转写视频语音，将字幕翻译成中文，人工审核翻译文本，并把中文或双语字幕烧录进最终视频。
 
-Current MVP:
+当前 MVP：
 
 ```text
-audio/video file
+音频/视频文件
 -> faster-whisper
--> transcript text
--> srt subtitles
--> segment json for aligned translation review
--> local llama.cpp translation
--> burned-in Chinese or bilingual subtitles
+-> 转写文本
+-> srt 字幕
+-> 用于对齐翻译审核的 segment json
+-> 本地 llama.cpp 翻译
+-> 烧录中文或双语字幕的视频
 ```
 
-## Project Layout
+## 项目结构
 
 ```text
 local_video_subtitle_translator/
@@ -28,7 +28,7 @@ local_video_subtitle_translator/
 +-- main.py
 ```
 
-Typical outputs:
+典型输出：
 
 - `output/lecture/lecture.segments.json`
 - `output/lecture/lecture.zh.json`
@@ -37,31 +37,31 @@ Typical outputs:
 - `output/lecture/lecture.bilingual.ass`
 - `output/lecture/lecture_bilingual_subs.mp4`
 
-## Environment
+## 环境
 
-The local Conda environment is:
+本地 Conda 环境：
 
 ```powershell
 D:\anaconda3\Scripts\conda.exe activate vibecoding
 ```
 
-Recreate it on another machine:
+在另一台机器上重建环境：
 
 ```powershell
 D:\anaconda3\Scripts\conda.exe env create -f environment.yml
 ```
 
-## Transcribe
+## 转写
 
-Put source media in `input/`, then run:
+把源视频或音频放进 `input/`，然后运行：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\transcribe.py input\lecture.mp4
 ```
 
-By default this uses CPU `int8`, which is slower than GPU but works without CUDA.
+默认使用 CPU `int8`，比 GPU 慢，但不需要 CUDA。
 
-Force a language:
+指定源语言：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\transcribe.py input\lecture.mp4 --language nl
@@ -69,111 +69,111 @@ D:\anaconda3\envs\vibecoding\python.exe scripts\transcribe.py input\lecture.mp4 
 D:\anaconda3\envs\vibecoding\python.exe scripts\transcribe.py input\lecture.mp4 --language zh
 ```
 
-Outputs are written to `transcript/`:
+输出会写入 `transcript/`：
 
 - `transcript/lecture.txt`
 - `transcript/lecture.srt`
 - `transcript/lecture.segments.json`
 
-CPU-friendly run:
+CPU 友好运行方式：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\transcribe.py input\lecture.mp4 --device cpu --compute-type int8
 ```
 
-GPU run, after CUDA/cuBLAS is correctly installed:
+正确安装 CUDA/cuBLAS 后可尝试 GPU：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\transcribe.py input\lecture.mp4 --device cuda --compute-type float16
 ```
 
-The first run of a model downloads model files from Hugging Face; later runs use the local cache.
+第一次使用某个 Whisper 模型时会从 Hugging Face 下载模型文件；后续会使用本地缓存。
 
-## Integrated Runner
+## 集成入口
 
-The easiest entry point is `main.py`.
+最简单的入口是 `main.py`。
 
-Open the GUI:
+打开 GUI：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe main.py
 ```
 
-or:
+或：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe main.py --gui
 ```
 
-Run the full pipeline from the command line:
+从命令行运行完整流程：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe main.py input\lecture.mp4 --language nl --subtitle-mode chinese --subtitle-position center --force
 ```
 
-Useful options:
+常用选项：
 
 - `--language auto|nl|en|zh|fr|es|de|it|pt|ja|ko|ru|ar|hi`
 - `--subtitle-mode chinese|bilingual`
 - `--subtitle-position upper|center|lower`
-- `--subtitle-y 0.55` for an exact vertical subtitle position
-- `--watermark "上北下南的东"` or `--watermark ""` to disable
+- `--subtitle-y 0.55` 精确控制字幕垂直位置
+- `--watermark "上北下南的东"` 或用 `--watermark ""` 关闭水印
 - `--translation-gpu-layers auto`
-- `--force` to rebuild existing artifacts
+- `--force` 重新生成已有中间文件
 
-The GUI is now a queue-based workbench:
+GUI 是一个队列式工作台：
 
-- add multiple media files and process them as a batch queue
-- check pipeline progress by step: subtitle detection, transcription, translation, subtitle files, video render
-- run environment checks for ffmpeg, ffprobe, llama-cli, the local GGUF model, faster-whisper, and NVIDIA GPU availability
-- preview the source first frame, rendered first frame, or generate a 5-second rendered preview clip
-- click the preview when subtitle position is set to custom
-- open the translation review window to edit source/Chinese segment text, then rebuild SRT/ASS before final render
+- 添加多个媒体文件并按队列批量处理
+- 按步骤查看进度：字幕检测、转写、翻译、字幕文件、视频烧录
+- 环境自检：ffmpeg、ffprobe、llama-cli、本地 GGUF 模型、faster-whisper、NVIDIA GPU
+- 预览原片首帧、成片首帧，或生成 5 秒成片预览片段
+- 字幕位置设为自定义时，可以点击预览画面选择位置
+- 打开翻译审核窗口，编辑原文/中文字幕 segment，然后在最终烧录前重建 SRT/ASS
 
-## Translate
+## 翻译
 
-Translation is offline-first through `llama.cpp` `llama-cli`.
+翻译优先走离线流程，使用 `llama.cpp` 的 `llama-cli`。
 
-Recommended local model direction: a small Chinese-capable instruct GGUF model, for example Qwen2.5/Qwen3 1.5B or 3B Instruct quantized to Q4/Q5.
+推荐使用小体量、支持中文的 instruct GGUF 模型，例如 Qwen2.5/Qwen3 1.5B 或 3B Instruct 的 Q4/Q5 量化版本。
 
-Installed local model:
+当前本地模型路径：
 
 - `models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf`
 
-Translate aligned transcript segments with a local GGUF model:
+用本地 GGUF 模型翻译对齐后的转写片段：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\translate.py transcript\lecture.segments.json --model models\Qwen2.5-1.5B-Instruct-Q4_K_M.gguf
 ```
 
-Use GPU offload when available:
+可用时启用 GPU offload：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\translate.py transcript\lecture.segments.json --model models\Qwen2.5-1.5B-Instruct-Q4_K_M.gguf --gpu-layers auto
 ```
 
-`translate.py` automatically uses the `llama-cli.exe` inside the `vibecoding` Conda environment when it exists. If you want to override it:
+`translate.py` 会优先使用 `vibecoding` Conda 环境里的 `llama-cli.exe`。也可以手动指定：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\translate.py transcript\lecture.segments.json --model models\Qwen2.5-1.5B-Instruct-Q4_K_M.gguf --llama-cli path\to\llama-cli.exe
 ```
 
-Outputs:
+输出：
 
 - `transcript/lecture.zh.json`
 - `transcript/lecture.bilingual.txt`
 
-The bilingual TXT keeps each source segment and its Chinese translation together. It is for review, not for final styled subtitles.
+双语 TXT 会把每段原文和中文翻译放在一起，方便审核；最终样式字幕不依赖 TXT。
 
-The subtitle pipeline stays local where practical:
+字幕流程尽量保持本地：
 
-- Subtitle generation: Python scripts.
-- Styled subtitle burn-in: ffmpeg with ASS/libass.
-- Translation: local `llama-cli` with a GGUF model.
+- 字幕生成：Python 脚本
+- 样式字幕烧录：ffmpeg + ASS/libass
+- 翻译：本地 `llama-cli` + GGUF 模型
 
-## Subtitle Format
+## 字幕格式
 
-Use SRT as a plain compatibility subtitle:
+SRT 作为通用兼容字幕：
 
 ```text
 1
@@ -182,40 +182,40 @@ Original line
 Chinese translation line
 ```
 
-SRT does not reliably support per-line color, font, or position across players. For bilingual subtitles with different colors or different screen positions, use ASS:
+SRT 在不同播放器中不可靠支持逐行颜色、字体或位置。双语字幕如果需要不同颜色或不同位置，使用 ASS：
 
 ```text
 Dialogue: 0,0:00:00.00,0:00:03.00,Source,,0,0,0,,Original line
 Dialogue: 0,0:00:00.00,0:00:03.00,Chinese,,0,0,0,,Chinese translation line
 ```
 
-## One-Step Subtitle Burn-In
+## 一步生成烧录字幕视频
 
-Run the full local pipeline on a source video:
+对源视频运行完整本地流程：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl
 ```
 
-Use GPU for local translation in the full pipeline:
+在完整流程里使用 GPU 翻译：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --translation-gpu-layers auto
 ```
 
-For phone screen recordings, crop fixed top/bottom app UI first:
+手机录屏素材可以先裁掉固定顶部/底部 UI：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --clean-recording
 ```
 
-The recording cleaner crops fixed top/bottom UI and pads the video back to the original size with white bars, so the image is not stretched. Tune it like this:
+录屏清理会裁掉固定顶部/底部 UI，再用白边补回原尺寸，避免画面被拉伸。也可以手动调参数：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --clean-recording --clean-top 120 --clean-bottom 180
 ```
 
-Outputs:
+输出：
 
 - `output/lecture/lecture.segments.json`
 - `output/lecture/lecture.zh.json`
@@ -224,15 +224,15 @@ Outputs:
 - `output/lecture/lecture.bilingual.ass`
 - `output/lecture/lecture_bilingual_subs.mp4`
 
-The pipeline first checks for embedded subtitle streams with `ffprobe`. It can detect real subtitle streams inside the container, but it cannot reliably detect subtitles already burned into the video image. Hardcoded visual subtitles need OCR if we want automatic detection later.
+流程会先用 `ffprobe` 检查视频容器里是否有内嵌字幕流。它可以检测真正的 subtitle stream，但不能可靠检测已经硬烧在画面里的字幕。硬字幕自动检测以后需要 OCR。
 
-The current default burn-in mode is Chinese-only, with yellow Chinese subtitles around the visual safe center for vertical social video. To render bilingual subtitles:
+当前默认烧录模式是仅中文字幕，黄色中文字幕放在竖屏社交视频的视觉安全中部。渲染双语字幕：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-mode bilingual
 ```
 
-Choose subtitle position:
+选择字幕位置：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-position upper
@@ -241,16 +241,16 @@ D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-y 0.55
 ```
 
-By default, the full pipeline adds a subtle floating watermark:
+完整流程默认添加一个很浅的浮动水印：
 
 ```text
 上北下南的东
 ```
 
-Disable it with:
+关闭水印：
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --watermark ""
 ```
 
-The current Conda ffmpeg build does not include the `ass/subtitles` filter, so `render_video.py` automatically falls back to `drawtext`.
+当前 Conda ffmpeg build 不包含 `ass/subtitles` filter，所以 `render_video.py` 会自动 fallback 到 `drawtext`。
