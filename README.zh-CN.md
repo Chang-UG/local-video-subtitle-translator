@@ -11,7 +11,7 @@
 -> faster-whisper
 -> 转写文本
 -> srt 字幕
--> 用于对齐翻译审核的 segment json
+-> 用于对齐翻译校对的 segment json
 -> 本地 llama.cpp 翻译
 -> 烧录中文或双语字幕的视频
 ```
@@ -120,16 +120,18 @@ D:\anaconda3\envs\vibecoding\python.exe main.py input\lecture.mp4 --language nl 
 - `--source-y 0.32` 在双语模式里精确控制原文字幕位置
 - `--watermark "上北下南的东"` 或用 `--watermark ""` 关闭水印
 - `--translation-gpu-layers auto`
+- `--skip-render` 只生成转写、翻译、SRT 和 ASS，不直接烧录视频
 - `--force` 重新生成已有中间文件
 
 GUI 是一个队列式工作台：
 
 - 添加多个媒体文件并按队列批量处理
 - 按步骤查看进度：字幕检测、转写、翻译、字幕文件、视频烧录
+- 选择直接渲染成片，或先生成字幕文件并等待翻译校对
 - 环境自检：ffmpeg、ffprobe、llama-cli、本地 GGUF 模型、faster-whisper、NVIDIA GPU
 - 预览原片首帧、成片首帧，或生成 5 秒成片预览片段
 - 双语模式下会显示原文/中文字幕两条指示线，点击靠近哪条线就调整哪种语言
-- 打开翻译审核窗口，编辑原文/中文字幕 segment，然后在最终烧录前重建 SRT/ASS
+- 打开翻译校对窗口，编辑原文/中文字幕 segment，然后校对后渲染当前视频
 
 ## 翻译
 

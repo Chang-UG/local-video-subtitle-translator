@@ -120,16 +120,18 @@ Useful options:
 - `--source-y 0.32` for an exact source-language subtitle position in bilingual mode
 - `--watermark "上北下南的东"` or `--watermark ""` to disable
 - `--translation-gpu-layers auto`
+- `--skip-render` to stop after transcript, translation, SRT, and ASS files
 - `--force` to rebuild existing artifacts
 
 The GUI is now a queue-based workbench:
 
 - add multiple media files and process them as a batch queue
 - check pipeline progress by step: subtitle detection, transcription, translation, subtitle files, video render
+- choose whether to render immediately or pause after subtitle files for translation review
 - run environment checks for ffmpeg, ffprobe, llama-cli, the local GGUF model, faster-whisper, and NVIDIA GPU availability
 - preview the source first frame, rendered first frame, or generate a 5-second rendered preview clip
 - in bilingual mode, show separate source/Chinese guide lines and click near either line to adjust that language
-- open the translation review window to edit source/Chinese segment text, then rebuild SRT/ASS before final render
+- open the translation review window to edit source/Chinese segment text, then render the selected video after review
 
 ## Translate
 

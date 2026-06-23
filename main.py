@@ -46,6 +46,10 @@ SUBTITLE_POSITIONS = {
     "中间": ("center", 0.58),
     "下方": ("lower", 0.72),
 }
+RENDER_POLICIES = {
+    "直接渲染成片": False,
+    "生成字幕后等待校对": True,
+}
 CUSTOM_POSITION_LABEL = "自定义"
 SUBTITLE_POSITION_LABELS = [*SUBTITLE_POSITIONS, CUSTOM_POSITION_LABEL]
 
@@ -171,7 +175,7 @@ class TranslationReviewWindow:
             import tkinter as tk
 
             self.window = tk.Toplevel(app.root)
-        self.window.title(f"翻译审核 · {input_path.stem}")
+        self.window.title(f"翻译校对 · {input_path.stem}")
         self.window.geometry("980x620")
         self.window.configure(bg="#101317")
         self._load()
@@ -343,6 +347,7 @@ class PipelineGui:
         self.language_label = StringVar(value=LANGUAGE_LABELS[0])
         self.subtitle_mode_label = StringVar(value="仅中文")
         self.subtitle_position_label = StringVar(value="中间")
+        self.render_policy_label = StringVar(value="直接渲染成片")
         self.subtitle_y = DoubleVar(value=0.58)
         self.source_y = DoubleVar(value=0.34)
         self.position_hint = StringVar(value="")
@@ -455,19 +460,29 @@ class PipelineGui:
         self.position_hint_label.grid(row=7, column=0, sticky="w", pady=(0, 12))
         self.position_hint_label.grid_remove()
 
-        self._section_label(controls, "选项", 8)
-        ttk.Checkbutton(controls, text="使用 GPU 翻译", variable=self.gpu).grid(row=9, column=0, sticky="w", pady=2)
-        ttk.Checkbutton(controls, text="重新生成全部文件", variable=self.force).grid(row=10, column=0, sticky="w", pady=2)
-        ttk.Checkbutton(controls, text="浮动水印", variable=self.use_watermark).grid(row=11, column=0, sticky="w", pady=(8, 3))
-        ttk.Entry(controls, textvariable=self.watermark).grid(row=12, column=0, sticky="ew", pady=(0, 12))
+        self._section_label(controls, "输出策略", 8)
+        ttk.Combobox(
+            controls,
+            textvariable=self.render_policy_label,
+            values=list(RENDER_POLICIES),
+            state="readonly",
+            width=30,
+        ).grid(row=9, column=0, sticky="ew", pady=(4, 8))
 
-        ttk.Button(controls, text="打开翻译审核", command=self.open_translation_review).grid(row=13, column=0, sticky="ew", pady=(0, 8))
+        self._section_label(controls, "选项", 10)
+        ttk.Checkbutton(controls, text="使用 GPU 翻译", variable=self.gpu).grid(row=11, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(controls, text="重新生成全部文件", variable=self.force).grid(row=12, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(controls, text="浮动水印", variable=self.use_watermark).grid(row=13, column=0, sticky="w", pady=(8, 3))
+        ttk.Entry(controls, textvariable=self.watermark).grid(row=14, column=0, sticky="ew", pady=(0, 12))
+
+        ttk.Button(controls, text="打开翻译校对", command=self.open_translation_review).grid(row=15, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(controls, text="渲染当前视频", command=self.render_selected).grid(row=16, column=0, sticky="ew", pady=(0, 8))
         self.run_button = ttk.Button(controls, text="开始处理队列", style="Accent.TButton", command=self.start)
-        self.run_button.grid(row=14, column=0, sticky="ew")
+        self.run_button.grid(row=17, column=0, sticky="ew")
 
-        self._section_label(controls, "流程", 15)
+        self._section_label(controls, "流程", 18)
         steps = ttk.Frame(controls, style="Panel.TFrame")
-        steps.grid(row=16, column=0, sticky="ew", pady=(4, 0))
+        steps.grid(row=19, column=0, sticky="ew", pady=(4, 0))
         for row, (key, name) in enumerate(PIPELINE_STEPS):
             var = StringVar(value=f"○ {name}")
             label = ttk.Label(steps, textvariable=var, style="Muted.TLabel")
@@ -483,7 +498,7 @@ class PipelineGui:
         self.env_tab = ttk.Frame(workspace, style="Panel.TFrame", padding=18)
         self.log_tab = ttk.Frame(workspace, style="Panel.TFrame", padding=18)
         workspace.add(self.preview_tab, text="预览")
-        workspace.add(self.review_tab, text="翻译审核")
+        workspace.add(self.review_tab, text="翻译校对")
         workspace.add(self.env_tab, text="环境")
         workspace.add(self.log_tab, text="日志")
 
@@ -531,10 +546,10 @@ class PipelineGui:
         self.review_tab.columnconfigure(0, weight=1)
         ttk.Label(
             self.review_tab,
-            text="烧录前先审核翻译。当前版本会打开一个独立审核窗口，保存后自动重建 SRT/ASS。",
+            text="烧录前先校对翻译。保存后自动重建 SRT/ASS，再渲染当前视频。",
             style="Panel.TLabel",
         ).grid(row=0, column=0, sticky="ew")
-        ttk.Button(self.review_tab, text="打开当前视频的翻译审核", command=self.open_translation_review).grid(
+        ttk.Button(self.review_tab, text="打开当前视频的翻译校对", command=self.open_translation_review).grid(
             row=1, column=0, sticky="w", pady=(14, 0)
         )
 
@@ -815,8 +830,14 @@ class PipelineGui:
             translation_gpu_layers="auto" if self.gpu.get() else "0",
             translation_batch_size=4,
             force=self.force.get(),
-            skip_render=False,
+            skip_render=RENDER_POLICIES[self.render_policy_label.get()],
         )
+
+    def render_args_for(self, input_path: Path) -> argparse.Namespace:
+        args = self.build_args_for(input_path)
+        args.skip_render = False
+        args.force = False
+        return args
 
     def start(self) -> None:
         if self.worker and self.worker.is_alive():
@@ -829,12 +850,35 @@ class PipelineGui:
         self.run_button.configure(state="disabled")
         self.reset_steps()
         jobs = [self.build_args_for(path) for path in self.input_files]
+        for index, job in enumerate(jobs):
+            job.queue_index = index
         self.worker = threading.Thread(target=self._run_queue_worker, args=(jobs,), daemon=True)
+        self.worker.start()
+
+    def render_selected(self) -> None:
+        if self.worker and self.worker.is_alive():
+            return
+        path = self.selected_input()
+        if not path:
+            messagebox.showinfo("暂无素材", "请先从队列里选择一个视频。")
+            return
+        paths = artifact_paths(path)
+        if not paths["zh"].exists() or not paths["ass"].exists():
+            messagebox.showinfo("还不能渲染", "还没有翻译 JSON 和字幕文件。请先处理队列到翻译/字幕文件阶段。")
+            return
+        self.log.delete("1.0", "end")
+        self.run_button.configure(state="disabled")
+        self.reset_steps()
+        args = self.render_args_for(path)
+        selected = self.queue_list.curselection()
+        args.queue_index = selected[0] if selected else 0
+        self.worker = threading.Thread(target=self._run_queue_worker, args=([args],), daemon=True)
         self.worker.start()
 
     def _run_queue_worker(self, jobs: list[argparse.Namespace]) -> None:
         for job_index, args in enumerate(jobs):
-            self.events.put(("job_start", (job_index, len(jobs), args.input)))
+            queue_index = getattr(args, "queue_index", job_index)
+            self.events.put(("job_start", (job_index, len(jobs), args.input, queue_index)))
             command = build_pipeline_command(args)
             self.events.put(("log", " ".join(command) + "\n\n"))
             process = subprocess.Popen(
@@ -850,7 +894,7 @@ class PipelineGui:
             for line in process.stdout:
                 self.events.put(("line", line))
             returncode = process.wait()
-            self.events.put(("job_done", (job_index, returncode, args.input)))
+            self.events.put(("job_done", (job_index, returncode, args.input, args.skip_render)))
             if returncode != 0:
                 break
         self.events.put(("queue_done", None))
@@ -864,6 +908,8 @@ class PipelineGui:
             return "translate"
         if "make_srt.py" in line or "Wrote:" in line or "Using existing subtitles" in line:
             return "subtitle_files"
+        if "--skip-render" in line:
+            return "render"
         if "render_video.py" in line or "Using existing rendered video" in line:
             return "render"
         return None
@@ -874,7 +920,12 @@ class PipelineGui:
 
     def mark_step(self, key: str, state: str = "running") -> None:
         names = dict(PIPELINE_STEPS)
-        prefix = "●" if state == "running" else "✓"
+        if state == "running":
+            prefix = "●"
+        elif state == "skipped":
+            prefix = "—"
+        else:
+            prefix = "✓"
         self.step_vars[key].set(f"{prefix} {names[key]}")
 
     def open_translation_review(self) -> None:
@@ -937,19 +988,27 @@ class PipelineGui:
                     if step:
                         self.mark_step(step, "running")
                 elif kind == "job_start":
-                    job_index, total, path = payload
+                    job_index, total, path, queue_index = payload
                     self.current_job_index = job_index
                     self.status.set(f"处理中 {job_index + 1}/{total}: {Path(path).name}")
                     self.reset_steps()
                     self.queue_list.selection_clear(0, "end")
-                    self.queue_list.selection_set(job_index)
-                    self.queue_list.see(job_index)
+                    if self.input_files:
+                        queue_index = min(queue_index, len(self.input_files) - 1)
+                        self.queue_list.selection_set(queue_index)
+                        self.queue_list.see(queue_index)
                 elif kind == "job_done":
-                    _job_index, returncode, path = payload
+                    _job_index, returncode, path, skipped_render = payload
                     if returncode == 0:
                         for key, _name in PIPELINE_STEPS:
-                            self.mark_step(key, "done")
-                        self.status.set(f"完成：{Path(path).name}")
+                            if key == "render" and skipped_render:
+                                self.mark_step(key, "skipped")
+                            else:
+                                self.mark_step(key, "done")
+                        if skipped_render:
+                            self.status.set(f"等待校对：{Path(path).name}")
+                        else:
+                            self.status.set(f"完成：{Path(path).name}")
                     else:
                         self.status.set(f"失败：{Path(path).name} · exit {returncode}")
                 elif kind == "queue_done":
