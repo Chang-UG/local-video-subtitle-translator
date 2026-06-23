@@ -34,6 +34,11 @@ def parse_args() -> argparse.Namespace:
         type=float,
         help="Exact Chinese subtitle vertical fraction from 0.05 to 0.90. Overrides --subtitle-position.",
     )
+    parser.add_argument(
+        "--source-y",
+        type=float,
+        help="Exact source-language subtitle vertical fraction from 0.05 to 0.90 for bilingual mode.",
+    )
     parser.add_argument("--output", type=Path, help="Output video path. Default: output/<stem>_bilingual_subs.mp4")
     parser.add_argument("--ffmpeg", default=str(DEFAULT_FFMPEG), help="Path to ffmpeg executable.")
     parser.add_argument("--crf", default="18", help="libx264 CRF quality. Default: 18")
@@ -76,7 +81,7 @@ def write_text_file(path: Path, text: str) -> None:
 
 
 def wrap_source(text: str) -> str:
-    return "\n".join(textwrap.wrap(text.strip(), width=24, break_long_words=False, break_on_hyphens=False))
+    return "\n".join(textwrap.wrap(text.strip(), width=30, break_long_words=False, break_on_hyphens=False))
 
 
 def wrap_chinese(text: str) -> str:
@@ -98,7 +103,7 @@ def wrap_chinese(text: str) -> str:
     return "\n".join(lines)
 
 
-def chinese_subtitle_y(position: str, exact_y: float | None = None) -> str:
+def subtitle_y_expr(position: str, exact_y: float | None = None) -> str:
     if exact_y is not None:
         clamped = min(0.90, max(0.05, exact_y))
         return f"(h-text_h)*{clamped:.3f}"
@@ -115,6 +120,7 @@ def build_drawtext_script(
     mode: str,
     subtitle_position: str = "center",
     subtitle_y: float | None = None,
+    source_y: float | None = None,
     watermark: str | None = None,
     watermark_opacity: float = 0.14,
     watermark_fontsize: int = 22,
@@ -123,7 +129,8 @@ def build_drawtext_script(
     chinese_font = Path("C:/Windows/Fonts/msyh.ttc")
     segments = load_segments(json_path)
     text_dir = work_dir / json_path.stem.replace(".zh", "")
-    zh_y = chinese_subtitle_y(subtitle_position, subtitle_y)
+    zh_y = subtitle_y_expr(subtitle_position, subtitle_y)
+    src_y = subtitle_y_expr("upper", source_y if source_y is not None else 0.34)
     filters: list[str] = []
 
     for segment in segments:
@@ -141,10 +148,10 @@ def build_drawtext_script(
                 f"fontfile='{drawtext_escape(source_font)}':"
                 f"textfile='{drawtext_escape(src_file)}':"
                 "expansion=none:"
-                "fontsize=28:fontcolor=white:"
+                "fontsize=22:fontcolor=white:"
                 "borderw=2:bordercolor=black:"
-                "line_spacing=2:"
-                "x=(w-text_w)/2:y=92:"
+                "line_spacing=-10:"
+                f"x=(w-text_w)/2:y={src_y}:"
                 f"enable='{enable}'"
             )
         filters.append(
@@ -194,9 +201,7 @@ def main() -> int:
         return 2
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    if has_filter(args.ffmpeg, "subtitles"):
-        filter_args = ["-vf", f"subtitles=filename='{filter_path(ass_path)}'"]
-    elif args.json:
+    if args.json:
         json_path = args.json.expanduser().resolve()
         if not json_path.exists():
             print(f"Translated JSON file not found: {json_path}", file=sys.stderr)
@@ -207,12 +212,15 @@ def main() -> int:
             args.mode,
             subtitle_position=args.subtitle_position,
             subtitle_y=args.subtitle_y,
+            source_y=args.source_y,
             watermark=args.watermark,
             watermark_opacity=args.watermark_opacity,
             watermark_fontsize=args.watermark_fontsize,
         )
         filter_args = ["-filter_script:v", str(script_path)]
-        print("ffmpeg lacks subtitles/ass filter; using drawtext fallback.")
+        print("Using drawtext subtitle burn-in.")
+    elif has_filter(args.ffmpeg, "subtitles"):
+        filter_args = ["-vf", f"subtitles=filename='{filter_path(ass_path)}'"]
     else:
         print("ffmpeg has no subtitles filter. Pass --json for drawtext fallback.", file=sys.stderr)
         return 2

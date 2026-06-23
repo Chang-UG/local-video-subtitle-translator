@@ -117,6 +117,7 @@ Useful options:
 - `--subtitle-mode chinese|bilingual`
 - `--subtitle-position upper|center|lower`
 - `--subtitle-y 0.55` for an exact vertical subtitle position
+- `--source-y 0.32` for an exact source-language subtitle position in bilingual mode
 - `--watermark "上北下南的东"` or `--watermark ""` to disable
 - `--translation-gpu-layers auto`
 - `--force` to rebuild existing artifacts
@@ -127,7 +128,7 @@ The GUI is now a queue-based workbench:
 - check pipeline progress by step: subtitle detection, transcription, translation, subtitle files, video render
 - run environment checks for ffmpeg, ffprobe, llama-cli, the local GGUF model, faster-whisper, and NVIDIA GPU availability
 - preview the source first frame, rendered first frame, or generate a 5-second rendered preview clip
-- click the preview when subtitle position is set to custom
+- in bilingual mode, show separate source/Chinese guide lines and click near either line to adjust that language
 - open the translation review window to edit source/Chinese segment text, then rebuild SRT/ASS before final render
 
 ## Translate
@@ -239,6 +240,7 @@ D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-position center
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-position lower
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-y 0.55
+D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-mode bilingual --source-y 0.32 --subtitle-y 0.58
 ```
 
 By default, the full pipeline adds a subtle floating watermark:

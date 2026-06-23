@@ -66,6 +66,11 @@ def parse_args() -> argparse.Namespace:
         type=float,
         help="Exact Chinese subtitle vertical fraction from 0.05 to 0.90. Overrides --subtitle-position.",
     )
+    parser.add_argument(
+        "--source-y",
+        type=float,
+        help="Exact source-language subtitle vertical fraction from 0.05 to 0.90 for bilingual mode.",
+    )
     parser.add_argument("--ffprobe", default=str(DEFAULT_FFPROBE), help="Path to ffprobe executable.")
     return parser.parse_args()
 
@@ -208,6 +213,7 @@ def main() -> int:
                     str(output_video),
                 ]
                 + (["--subtitle-y", str(args.subtitle_y)] if args.subtitle_y is not None else [])
+                + (["--source-y", str(args.source_y)] if args.source_y is not None else [])
                 + (
                     [
                         "--watermark",

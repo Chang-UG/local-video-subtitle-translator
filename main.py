@@ -104,6 +104,8 @@ def build_pipeline_command(args: argparse.Namespace) -> list[str]:
     ]
     if args.subtitle_y is not None:
         command.extend(["--subtitle-y", f"{args.subtitle_y:.3f}"])
+    if getattr(args, "source_y", None) is not None:
+        command.extend(["--source-y", f"{args.source_y:.3f}"])
     if args.force:
         command.append("--force")
     if args.skip_render:
@@ -141,6 +143,7 @@ def parse_args() -> argparse.Namespace:
         help="Chinese subtitle vertical position.",
     )
     parser.add_argument("--subtitle-y", type=float, help="Exact subtitle vertical fraction from 0.05 to 0.90.")
+    parser.add_argument("--source-y", type=float, help="Exact source subtitle vertical fraction from 0.05 to 0.90.")
     parser.add_argument("--watermark", default=DEFAULT_WATERMARK, help="Floating watermark text. Use empty string to disable.")
     parser.add_argument("--translation-gpu-layers", default="auto", help="llama.cpp GPU layers. Default: auto")
     parser.add_argument("--translation-batch-size", type=int, default=4, help="Translation batch size. Default: 4")
@@ -341,6 +344,7 @@ class PipelineGui:
         self.subtitle_mode_label = StringVar(value="仅中文")
         self.subtitle_position_label = StringVar(value="中间")
         self.subtitle_y = DoubleVar(value=0.58)
+        self.source_y = DoubleVar(value=0.34)
         self.position_hint = StringVar(value="")
         self.watermark = StringVar(value=DEFAULT_WATERMARK)
         self.use_watermark = BooleanVar(value=True)
@@ -429,13 +433,15 @@ class PipelineGui:
         ).grid(row=3, column=0, sticky="ew", pady=(4, 12))
 
         self._section_label(controls, "字幕", 4)
-        ttk.Combobox(
+        mode_combo = ttk.Combobox(
             controls,
             textvariable=self.subtitle_mode_label,
             values=list(SUBTITLE_MODES),
             state="readonly",
             width=30,
-        ).grid(row=5, column=0, sticky="ew", pady=(4, 8))
+        )
+        mode_combo.grid(row=5, column=0, sticky="ew", pady=(4, 8))
+        mode_combo.bind("<<ComboboxSelected>>", self._subtitle_mode_changed)
         position_combo = ttk.Combobox(
             controls,
             textvariable=self.subtitle_position_label,
@@ -712,6 +718,10 @@ class PipelineGui:
         self._update_position_label()
         self._draw_subtitle_marker()
 
+    def _subtitle_mode_changed(self, _event=None) -> None:
+        self._update_position_label()
+        self._draw_subtitle_marker()
+
     def _preview_clicked(self, event) -> None:
         x0, y0 = self.preview_origin
         width, height = self.preview_image_size
@@ -720,7 +730,15 @@ class PipelineGui:
         else:
             fraction = event.y / self.preview_height
         fraction = min(0.90, max(0.05, fraction))
-        self.subtitle_y.set(fraction)
+        if self.is_bilingual_mode():
+            source_distance = abs(event.y - self._marker_canvas_y("source"))
+            chinese_distance = abs(event.y - self._marker_canvas_y("chinese"))
+            if source_distance < chinese_distance:
+                self.source_y.set(fraction)
+            else:
+                self.subtitle_y.set(fraction)
+        else:
+            self.subtitle_y.set(fraction)
         self.subtitle_position_label.set(CUSTOM_POSITION_LABEL)
         self._set_custom_position_hint(selected=True)
         self._update_position_label()
@@ -728,7 +746,18 @@ class PipelineGui:
 
     def _draw_subtitle_marker(self) -> None:
         self.canvas.delete("subtitle_marker")
-        y = self._marker_canvas_y()
+        if self.is_bilingual_mode():
+            source_y = self._marker_canvas_y("source")
+            self.canvas.create_line(28, source_y, self.preview_width - 28, source_y, fill="#ffffff", width=2, tags="subtitle_marker")
+            self.canvas.create_text(
+                self.preview_width / 2,
+                source_y - 16,
+                text="原文字幕",
+                fill="#ffffff",
+                font=("Segoe UI", 12, "bold"),
+                tags="subtitle_marker",
+            )
+        y = self._marker_canvas_y("chinese")
         self.canvas.create_line(28, y, self.preview_width - 28, y, fill="#f4d35e", width=2, tags="subtitle_marker")
         self.canvas.create_text(
             self.preview_width / 2,
@@ -739,26 +768,38 @@ class PipelineGui:
             tags="subtitle_marker",
         )
 
-    def _marker_canvas_y(self) -> float:
+    def _marker_canvas_y(self, language: str = "chinese") -> float:
         _x0, y0 = self.preview_origin
         _width, height = self.preview_image_size
+        fraction = self.source_y.get() if language == "source" else self.subtitle_y.get()
         if height:
-            return y0 + height * self.subtitle_y.get()
-        return self.preview_height * self.subtitle_y.get()
+            return y0 + height * fraction
+        return self.preview_height * fraction
 
     def _update_position_label(self) -> None:
-        self.position_text.set(f"字幕位置：{self.subtitle_y.get() * 100:.0f}%")
+        if self.is_bilingual_mode():
+            self.position_text.set(f"原文：{self.source_y.get() * 100:.0f}% · 中文：{self.subtitle_y.get() * 100:.0f}%")
+        else:
+            self.position_text.set(f"字幕位置：{self.subtitle_y.get() * 100:.0f}%")
 
     def _set_custom_position_hint(self, active: bool = True, selected: bool = False) -> None:
         if not active:
             self.position_hint.set("")
             self.preview_hint_label.configure(text="")
             self.position_hint_label.grid_remove()
+            self.preview_hint_label.pack_forget()
             return
         text = "已选择，可继续点击微调" if selected else "点击预览选择位置"
+        if self.is_bilingual_mode() and not selected:
+            text = "点击靠近对应指示线的位置，分别调整原文和中文字幕"
         self.position_hint.set(text)
         self.preview_hint_label.configure(text=text)
         self.position_hint_label.grid()
+        if not self.preview_hint_label.winfo_ismapped():
+            self.preview_hint_label.pack(side="right")
+
+    def is_bilingual_mode(self) -> bool:
+        return SUBTITLE_MODES.get(self.subtitle_mode_label.get()) == "bilingual"
 
     def build_args_for(self, input_path: Path) -> argparse.Namespace:
         position_label = self.subtitle_position_label.get()
@@ -769,6 +810,7 @@ class PipelineGui:
             subtitle_mode=SUBTITLE_MODES[self.subtitle_mode_label.get()],
             subtitle_position=subtitle_position,
             subtitle_y=self.subtitle_y.get(),
+            source_y=self.source_y.get() if self.is_bilingual_mode() else None,
             watermark=self.watermark.get() if self.use_watermark.get() else "",
             translation_gpu_layers="auto" if self.gpu.get() else "0",
             translation_batch_size=4,

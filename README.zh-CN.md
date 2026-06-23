@@ -117,6 +117,7 @@ D:\anaconda3\envs\vibecoding\python.exe main.py input\lecture.mp4 --language nl 
 - `--subtitle-mode chinese|bilingual`
 - `--subtitle-position upper|center|lower`
 - `--subtitle-y 0.55` 精确控制字幕垂直位置
+- `--source-y 0.32` 在双语模式里精确控制原文字幕位置
 - `--watermark "上北下南的东"` 或用 `--watermark ""` 关闭水印
 - `--translation-gpu-layers auto`
 - `--force` 重新生成已有中间文件
@@ -127,7 +128,7 @@ GUI 是一个队列式工作台：
 - 按步骤查看进度：字幕检测、转写、翻译、字幕文件、视频烧录
 - 环境自检：ffmpeg、ffprobe、llama-cli、本地 GGUF 模型、faster-whisper、NVIDIA GPU
 - 预览原片首帧、成片首帧，或生成 5 秒成片预览片段
-- 字幕位置设为自定义时，可以点击预览画面选择位置
+- 双语模式下会显示原文/中文字幕两条指示线，点击靠近哪条线就调整哪种语言
 - 打开翻译审核窗口，编辑原文/中文字幕 segment，然后在最终烧录前重建 SRT/ASS
 
 ## 翻译
@@ -239,6 +240,7 @@ D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-position center
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-position lower
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-y 0.55
+D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --subtitle-mode bilingual --source-y 0.32 --subtitle-y 0.58
 ```
 
 完整流程默认添加一个很浅的浮动水印：

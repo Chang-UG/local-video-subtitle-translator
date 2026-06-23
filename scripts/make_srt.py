@@ -82,7 +82,7 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Source,Arial,38,&H00FFFFFF,&H00FFFFFF,&H00111111,&H90000000,0,0,0,0,100,100,0,0,1,2,0,8,56,56,42,1
+Style: Source,Arial,32,&H00FFFFFF,&H00FFFFFF,&H00111111,&H90000000,0,0,0,0,100,100,0,0,1,2,0,8,56,56,120,1
 Style: Chinese,Microsoft YaHei,44,&H0000D7FF,&H0000D7FF,&H00111111,&H90000000,1,0,0,0,100,100,0,0,1,2.4,0,2,56,56,52,1
 
 [Events]
