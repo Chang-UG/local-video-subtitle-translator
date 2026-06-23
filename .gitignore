@@ -1,0 +1,39 @@
+# Local media and generated artifacts
+input/*
+output/*
+audio/*
+dub/*
+transcript/*
+models/*
+_dist/
+
+# Keep folder placeholders
+!input/.gitkeep
+!output/.gitkeep
+!audio/.gitkeep
+!dub/.gitkeep
+!transcript/.gitkeep
+!models/.gitkeep
+
+# Python/cache/editor noise
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.agents/
+.codex/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.zip
+
+# Large local model/cache files
+*.gguf
+*.bin
+*.safetensors
+models/.cache/
