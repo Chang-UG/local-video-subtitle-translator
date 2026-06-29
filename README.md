@@ -114,6 +114,8 @@ D:\anaconda3\envs\vibecoding\python.exe main.py input\lecture.mp4 --language nl 
 Useful options:
 
 - `--language auto|nl|en|zh|fr|es|de|it|pt|ja|ko|ru|ar|hi`
+- `--subtitle-source audio|external-srt`
+- `--source-srt path\to\subtitle.srt` when using an external SRT file
 - `--subtitle-mode chinese|bilingual`
 - `--subtitle-position upper|center|lower`
 - `--subtitle-y 0.55` for an exact vertical subtitle position
@@ -126,6 +128,7 @@ Useful options:
 The GUI is now a queue-based workbench:
 
 - add multiple media files and process them as a batch queue
+- choose whether the source subtitles come from audio transcription or an external SRT file
 - check pipeline progress by step: subtitle detection, transcription, translation, subtitle files, video render
 - choose whether to render immediately or pause after subtitle files for translation review
 - run environment checks for ffmpeg, ffprobe, llama-cli, the local GGUF model, faster-whisper, and NVIDIA GPU availability
@@ -198,6 +201,12 @@ Run the full local pipeline on a source video:
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl
+```
+
+Use an external source-language SRT instead of transcribing the video audio:
+
+```powershell
+D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --subtitle-source external-srt --source-srt input\lecture.nl.srt --language nl
 ```
 
 Use GPU for local translation in the full pipeline:

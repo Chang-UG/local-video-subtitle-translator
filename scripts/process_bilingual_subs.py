@@ -43,6 +43,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--force", action="store_true", help="Rebuild all intermediate files.")
     parser.add_argument("--skip-render", action="store_true", help="Build subtitle files but do not render video.")
+    parser.add_argument(
+        "--subtitle-source",
+        choices=["audio", "external-srt"],
+        default="audio",
+        help="Source for the original-language transcript. Default: audio",
+    )
+    parser.add_argument("--source-srt", type=Path, help="External source-language SRT file used with --subtitle-source external-srt.")
     parser.add_argument("--clean-recording", action="store_true", help="Crop fixed phone UI before processing.")
     parser.add_argument("--clean-top", type=int, default=80, help="Pixels to crop from top when --clean-recording is used.")
     parser.add_argument("--clean-bottom", type=int, default=140, help="Pixels to crop from bottom when --clean-recording is used.")
@@ -103,6 +110,20 @@ def subtitle_streams(input_path: Path, ffprobe: str) -> list[dict[str, Any]]:
     return streams if isinstance(streams, list) else []
 
 
+def transcript_matches_external_srt(transcript_json: Path, source_srt: Path) -> bool:
+    if not transcript_json.exists():
+        return False
+    try:
+        payload = json.loads(transcript_json.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    metadata = payload.get("metadata", {})
+    return (
+        metadata.get("source") == "external_srt"
+        and Path(str(metadata.get("source_srt", ""))).resolve() == source_srt.resolve()
+    )
+
+
 def main() -> int:
     args = parse_args()
     input_path = args.input.expanduser().resolve()
@@ -149,7 +170,31 @@ def main() -> int:
     else:
         print("No embedded subtitle streams detected. Hardcoded visual subtitles are not detectable here.")
 
-    if args.force or not transcript_json.exists():
+    if args.subtitle_source == "external-srt":
+        if not args.source_srt:
+            print("--source-srt is required when --subtitle-source external-srt", file=sys.stderr)
+            return 2
+        source_srt = args.source_srt.expanduser().resolve()
+        if not source_srt.exists():
+            print(f"SRT file not found: {source_srt}", file=sys.stderr)
+            return 2
+        if args.force or not transcript_matches_external_srt(transcript_json, source_srt):
+            run(
+                [
+                    sys.executable,
+                    "scripts/import_srt.py",
+                    str(source_srt),
+                    "--output-json",
+                    str(transcript_json),
+                    "--language",
+                    args.language,
+                    "--media",
+                    str(input_path),
+                ]
+            )
+        else:
+            print(f"Using existing imported SRT transcript: {transcript_json}")
+    elif args.force or not transcript_json.exists():
         command = [sys.executable, "scripts/transcribe.py", str(input_path)]
         command.extend(["--output-dir", str(artifact_dir)])
         if args.language != "auto":

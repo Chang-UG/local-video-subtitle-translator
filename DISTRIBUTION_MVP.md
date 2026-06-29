@@ -41,6 +41,7 @@ Local-Video-Subtitle-Translator-MVP/
 |   |-- process_bilingual_subs.py
 |   |-- transcribe.py
 |   |-- translate.py
+|   |-- import_srt.py
 |   |-- make_srt.py
 |   |-- render_video.py
 |   |-- clean_recording.py

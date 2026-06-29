@@ -114,6 +114,8 @@ D:\anaconda3\envs\vibecoding\python.exe main.py input\lecture.mp4 --language nl 
 常用选项：
 
 - `--language auto|nl|en|zh|fr|es|de|it|pt|ja|ko|ru|ar|hi`
+- `--subtitle-source audio|external-srt`
+- `--source-srt path\to\subtitle.srt` 使用外部 SRT 时指定字幕文件
 - `--subtitle-mode chinese|bilingual`
 - `--subtitle-position upper|center|lower`
 - `--subtitle-y 0.55` 精确控制字幕垂直位置
@@ -126,6 +128,7 @@ D:\anaconda3\envs\vibecoding\python.exe main.py input\lecture.mp4 --language nl 
 GUI 是一个队列式工作台：
 
 - 添加多个媒体文件并按队列批量处理
+- 选择字幕来源：从视频音轨转写，或使用外部 SRT 文件
 - 按步骤查看进度：字幕检测、转写、翻译、字幕文件、视频烧录
 - 选择直接渲染成片，或先生成字幕文件并等待翻译校对
 - 环境自检：ffmpeg、ffprobe、llama-cli、本地 GGUF 模型、faster-whisper、NVIDIA GPU
@@ -198,6 +201,12 @@ Dialogue: 0,0:00:00.00,0:00:03.00,Chinese,,0,0,0,,Chinese translation line
 
 ```powershell
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl
+```
+
+如果已经有原文 SRT，可以跳过音频转写，直接使用外部 SRT：
+
+```powershell
+D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --subtitle-source external-srt --source-srt input\lecture.nl.srt --language nl
 ```
 
 在完整流程里使用 GPU 翻译：

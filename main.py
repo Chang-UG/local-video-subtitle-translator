@@ -50,6 +50,10 @@ RENDER_POLICIES = {
     "直接渲染成片": False,
     "生成字幕后等待校对": True,
 }
+SUBTITLE_SOURCES = {
+    "从视频音轨转写": "audio",
+    "使用外部 SRT": "external-srt",
+}
 CUSTOM_POSITION_LABEL = "自定义"
 SUBTITLE_POSITION_LABELS = [*SUBTITLE_POSITIONS, CUSTOM_POSITION_LABEL]
 
@@ -106,6 +110,10 @@ def build_pipeline_command(args: argparse.Namespace) -> list[str]:
         "--watermark",
         args.watermark,
     ]
+    if getattr(args, "subtitle_source", "audio") != "audio":
+        command.extend(["--subtitle-source", args.subtitle_source])
+    if getattr(args, "source_srt", None):
+        command.extend(["--source-srt", str(args.source_srt)])
     if args.subtitle_y is not None:
         command.extend(["--subtitle-y", f"{args.subtitle_y:.3f}"])
     if getattr(args, "source_y", None) is not None:
@@ -148,6 +156,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--subtitle-y", type=float, help="Exact subtitle vertical fraction from 0.05 to 0.90.")
     parser.add_argument("--source-y", type=float, help="Exact source subtitle vertical fraction from 0.05 to 0.90.")
+    parser.add_argument(
+        "--subtitle-source",
+        choices=["audio", "external-srt"],
+        default="audio",
+        help="Source for original-language subtitles.",
+    )
+    parser.add_argument("--source-srt", type=Path, help="External source-language SRT file.")
     parser.add_argument("--watermark", default=DEFAULT_WATERMARK, help="Floating watermark text. Use empty string to disable.")
     parser.add_argument("--translation-gpu-layers", default="auto", help="llama.cpp GPU layers. Default: auto")
     parser.add_argument("--translation-batch-size", type=int, default=4, help="Translation batch size. Default: 4")
@@ -343,10 +358,13 @@ class PipelineGui:
         self.root.configure(bg="#101317")
 
         self.input_files: list[Path] = []
+        self.external_srt_files: dict[Path, Path] = {}
         self.file_path = StringVar()
         self.language_label = StringVar(value=LANGUAGE_LABELS[0])
         self.subtitle_mode_label = StringVar(value="仅中文")
         self.subtitle_position_label = StringVar(value="中间")
+        self.subtitle_source_label = StringVar(value="从视频音轨转写")
+        self.source_srt_status = StringVar(value="未绑定外部 SRT")
         self.render_policy_label = StringVar(value="直接渲染成片")
         self.subtitle_y = DoubleVar(value=0.58)
         self.source_y = DoubleVar(value=0.34)
@@ -460,29 +478,42 @@ class PipelineGui:
         self.position_hint_label.grid(row=7, column=0, sticky="w", pady=(0, 12))
         self.position_hint_label.grid_remove()
 
-        self._section_label(controls, "输出策略", 8)
+        self._section_label(controls, "字幕来源", 8)
+        source_combo = ttk.Combobox(
+            controls,
+            textvariable=self.subtitle_source_label,
+            values=list(SUBTITLE_SOURCES),
+            state="readonly",
+            width=30,
+        )
+        source_combo.grid(row=9, column=0, sticky="ew", pady=(4, 6))
+        source_combo.bind("<<ComboboxSelected>>", self._subtitle_source_changed)
+        ttk.Button(controls, text="选择当前视频的 SRT", command=self.choose_srt_for_selected).grid(row=10, column=0, sticky="ew", pady=(0, 4))
+        ttk.Label(controls, textvariable=self.source_srt_status, style="Muted.TLabel").grid(row=11, column=0, sticky="w", pady=(0, 12))
+
+        self._section_label(controls, "输出策略", 12)
         ttk.Combobox(
             controls,
             textvariable=self.render_policy_label,
             values=list(RENDER_POLICIES),
             state="readonly",
             width=30,
-        ).grid(row=9, column=0, sticky="ew", pady=(4, 8))
+        ).grid(row=13, column=0, sticky="ew", pady=(4, 8))
 
-        self._section_label(controls, "选项", 10)
-        ttk.Checkbutton(controls, text="使用 GPU 翻译", variable=self.gpu).grid(row=11, column=0, sticky="w", pady=2)
-        ttk.Checkbutton(controls, text="重新生成全部文件", variable=self.force).grid(row=12, column=0, sticky="w", pady=2)
-        ttk.Checkbutton(controls, text="浮动水印", variable=self.use_watermark).grid(row=13, column=0, sticky="w", pady=(8, 3))
-        ttk.Entry(controls, textvariable=self.watermark).grid(row=14, column=0, sticky="ew", pady=(0, 12))
+        self._section_label(controls, "选项", 14)
+        ttk.Checkbutton(controls, text="使用 GPU 翻译", variable=self.gpu).grid(row=15, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(controls, text="重新生成全部文件", variable=self.force).grid(row=16, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(controls, text="浮动水印", variable=self.use_watermark).grid(row=17, column=0, sticky="w", pady=(8, 3))
+        ttk.Entry(controls, textvariable=self.watermark).grid(row=18, column=0, sticky="ew", pady=(0, 12))
 
-        ttk.Button(controls, text="打开翻译校对", command=self.open_translation_review).grid(row=15, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(controls, text="渲染当前视频", command=self.render_selected).grid(row=16, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(controls, text="打开翻译校对", command=self.open_translation_review).grid(row=19, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(controls, text="渲染当前视频", command=self.render_selected).grid(row=20, column=0, sticky="ew", pady=(0, 8))
         self.run_button = ttk.Button(controls, text="开始处理队列", style="Accent.TButton", command=self.start)
-        self.run_button.grid(row=17, column=0, sticky="ew")
+        self.run_button.grid(row=21, column=0, sticky="ew")
 
-        self._section_label(controls, "流程", 18)
+        self._section_label(controls, "流程", 22)
         steps = ttk.Frame(controls, style="Panel.TFrame")
-        steps.grid(row=19, column=0, sticky="ew", pady=(4, 0))
+        steps.grid(row=23, column=0, sticky="ew", pady=(4, 0))
         for row, (key, name) in enumerate(PIPELINE_STEPS):
             var = StringVar(value=f"○ {name}")
             label = ttk.Label(steps, textvariable=var, style="Muted.TLabel")
@@ -601,6 +632,17 @@ class PipelineGui:
             return self.input_files[0]
         return None
 
+    def update_srt_status(self) -> None:
+        path = self.selected_input()
+        if not path:
+            self.source_srt_status.set("未绑定外部 SRT")
+            return
+        source_srt = self.external_srt_files.get(path)
+        if source_srt:
+            self.source_srt_status.set(f"SRT: {source_srt.name}")
+        else:
+            self.source_srt_status.set("未绑定外部 SRT")
+
     def add_files(self) -> None:
         filenames = filedialog.askopenfilenames(
             title="选择视频或音频",
@@ -618,6 +660,7 @@ class PipelineGui:
     def remove_selected(self) -> None:
         selected = list(self.queue_list.curselection())
         for index in reversed(selected):
+            self.external_srt_files.pop(self.input_files[index], None)
             self.queue_list.delete(index)
             del self.input_files[index]
         if self.input_files:
@@ -629,8 +672,10 @@ class PipelineGui:
 
     def clear_queue(self) -> None:
         self.input_files.clear()
+        self.external_srt_files.clear()
         self.queue_list.delete(0, "end")
         self.file_path.set("")
+        self.update_srt_status()
         self._draw_empty_preview()
 
     def _queue_selected(self, _event=None) -> None:
@@ -638,7 +683,25 @@ class PipelineGui:
         if not path:
             return
         self.file_path.set(str(path))
+        self.update_srt_status()
         self.load_preview(path)
+
+    def _subtitle_source_changed(self, _event=None) -> None:
+        self.update_srt_status()
+
+    def choose_srt_for_selected(self) -> None:
+        path = self.selected_input()
+        if not path:
+            messagebox.showinfo("暂无素材", "请先从队列里选择一个视频。")
+            return
+        filename = filedialog.askopenfilename(
+            title="选择当前视频对应的 SRT 字幕",
+            filetypes=[("SRT subtitles", "*.srt"), ("All files", "*.*")],
+        )
+        if filename:
+            self.external_srt_files[path] = Path(filename)
+            self.subtitle_source_label.set("使用外部 SRT")
+            self.update_srt_status()
 
     def load_selected_preview(self, rendered: bool) -> None:
         path = self.selected_input()
@@ -826,6 +889,8 @@ class PipelineGui:
             subtitle_position=subtitle_position,
             subtitle_y=self.subtitle_y.get(),
             source_y=self.source_y.get() if self.is_bilingual_mode() else None,
+            subtitle_source=SUBTITLE_SOURCES[self.subtitle_source_label.get()],
+            source_srt=self.external_srt_files.get(input_path),
             watermark=self.watermark.get() if self.use_watermark.get() else "",
             translation_gpu_layers="auto" if self.gpu.get() else "0",
             translation_batch_size=4,
@@ -845,6 +910,14 @@ class PipelineGui:
         if not self.input_files:
             messagebox.showwarning("Missing file", "请先添加至少一个视频或音频文件。")
             return
+        if SUBTITLE_SOURCES[self.subtitle_source_label.get()] == "external-srt":
+            missing = [path.name for path in self.input_files if path not in self.external_srt_files]
+            if missing:
+                messagebox.showwarning(
+                    "缺少 SRT",
+                    "当前字幕来源是外部 SRT，请为这些视频绑定 SRT：\n" + "\n".join(missing),
+                )
+                return
 
         self.log.delete("1.0", "end")
         self.run_button.configure(state="disabled")
@@ -902,7 +975,14 @@ class PipelineGui:
     def classify_step(self, line: str) -> str | None:
         if "subtitle streams" in line or "Hardcoded visual subtitles" in line:
             return "subtitles"
-        if "transcribe.py" in line or "Transcribing:" in line or "Using existing transcript" in line:
+        if (
+            "transcribe.py" in line
+            or "Transcribing:" in line
+            or "Using existing transcript" in line
+            or "import_srt.py" in line
+            or "Imported external SRT" in line
+            or "Using existing imported SRT transcript" in line
+        ):
             return "transcribe"
         if "translate.py" in line or "Translating batch" in line or "Using existing translation" in line:
             return "translate"
