@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A local-first tool for transcribing videos, translating subtitles into Chinese, reviewing the translated text, and burning Chinese or bilingual subtitles into the final video.
+A local-first tool for transcribing videos, translating subtitles into Chinese or English, reviewing the translated text, and burning translated or bilingual subtitles into the final video.
 
 Current MVP:
 
@@ -13,7 +13,7 @@ audio/video file
 -> srt subtitles
 -> segment json for aligned translation review
 -> local llama.cpp translation
--> burned-in Chinese or bilingual subtitles
+-> burned-in translated or bilingual subtitles
 ```
 
 ## Project Layout
@@ -35,7 +35,7 @@ Typical outputs:
 - `output/lecture/lecture.bilingual.txt`
 - `output/lecture/lecture.bilingual.srt`
 - `output/lecture/lecture.bilingual.ass`
-- `output/lecture/lecture_bilingual_subs.mp4`
+- `output/lecture/lecture_zh_subs.mp4`
 
 ## Environment
 
@@ -114,6 +114,7 @@ D:\anaconda3\envs\vibecoding\python.exe main.py input\lecture.mp4 --language nl 
 Useful options:
 
 - `--language auto|nl|en|zh|fr|es|de|it|pt|ja|ko|ru|ar|hi`
+- `--target-language zh|en`
 - `--subtitle-source audio|external-srt`
 - `--source-srt path\to\subtitle.srt` when using an external SRT file
 - `--subtitle-mode chinese|bilingual`
@@ -128,13 +129,14 @@ Useful options:
 The GUI is now a queue-based workbench:
 
 - add multiple media files and process them as a batch queue
+- choose the translation target: Chinese subtitles or English subtitles
 - choose whether the source subtitles come from audio transcription or an external SRT file
 - check pipeline progress by step: subtitle detection, transcription, translation, subtitle files, video render
 - choose whether to render immediately or pause after subtitle files for translation review
 - run environment checks for ffmpeg, ffprobe, llama-cli, the local GGUF model, faster-whisper, and NVIDIA GPU availability
 - preview the source first frame, rendered first frame, or generate a 5-second rendered preview clip
-- in bilingual mode, show separate source/Chinese guide lines and click near either line to adjust that language
-- open the translation review window to edit source/Chinese segment text, then render the selected video after review
+- in bilingual mode, show separate source/target guide lines and click near either line to adjust that language
+- open the translation review window to edit source/target segment text, then render the selected video after review
 
 ## Translate
 
@@ -152,6 +154,12 @@ Translate aligned transcript segments with a local GGUF model:
 D:\anaconda3\envs\vibecoding\python.exe scripts\translate.py transcript\lecture.segments.json --model models\Qwen2.5-1.5B-Instruct-Q4_K_M.gguf
 ```
 
+Translate Chinese source subtitles into English:
+
+```powershell
+D:\anaconda3\envs\vibecoding\python.exe scripts\translate.py transcript\lecture.segments.json --model models\Qwen2.5-1.5B-Instruct-Q4_K_M.gguf --target-language en
+```
+
 Use GPU offload when available:
 
 ```powershell
@@ -167,9 +175,10 @@ D:\anaconda3\envs\vibecoding\python.exe scripts\translate.py transcript\lecture.
 Outputs:
 
 - `transcript/lecture.zh.json`
+- `transcript/lecture.en.json` when `--target-language en` is used
 - `transcript/lecture.bilingual.txt`
 
-The bilingual TXT keeps each source segment and its Chinese translation together. It is for review, not for final styled subtitles.
+The bilingual TXT keeps each source segment and its target-language translation together. It is for review, not for final styled subtitles.
 
 The subtitle pipeline stays local where practical:
 
@@ -192,7 +201,7 @@ SRT does not reliably support per-line color, font, or position across players. 
 
 ```text
 Dialogue: 0,0:00:00.00,0:00:03.00,Source,,0,0,0,,Original line
-Dialogue: 0,0:00:00.00,0:00:03.00,Chinese,,0,0,0,,Chinese translation line
+Dialogue: 0,0:00:00.00,0:00:03.00,Target,,0,0,0,,Translated line
 ```
 
 ## One-Step Subtitle Burn-In
@@ -215,6 +224,12 @@ Use GPU for local translation in the full pipeline:
 D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language nl --translation-gpu-layers auto
 ```
 
+Translate Chinese subtitles into English in the full pipeline:
+
+```powershell
+D:\anaconda3\envs\vibecoding\python.exe scripts\process_bilingual_subs.py input\lecture.mp4 --language zh --target-language en
+```
+
 For phone screen recordings, crop fixed top/bottom app UI first:
 
 ```powershell
@@ -234,7 +249,8 @@ Outputs:
 - `output/lecture/lecture.bilingual.txt`
 - `output/lecture/lecture.bilingual.srt`
 - `output/lecture/lecture.bilingual.ass`
-- `output/lecture/lecture_bilingual_subs.mp4`
+- `output/lecture/lecture_zh_subs.mp4`
+- `output/lecture/lecture_en_subs.mp4` when `--target-language en` is used
 
 The pipeline first checks for embedded subtitle streams with `ffprobe`. It can detect real subtitle streams inside the container, but it cannot reliably detect subtitles already burned into the video image. Hardcoded visual subtitles need OCR if we want automatic detection later.
 

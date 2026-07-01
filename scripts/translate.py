@@ -56,9 +56,15 @@ def parse_args() -> argparse.Namespace:
         help="llama.cpp GPU offload layers. Use auto to enable GPU offload. Default: 0",
     )
     parser.add_argument(
+        "--target-language",
+        choices=["zh", "en"],
+        default="zh",
+        help="Translation target language. Use zh for Simplified Chinese or en for English. Default: zh",
+    )
+    parser.add_argument(
         "--output-json",
         type=Path,
-        help="Output Chinese transcript JSON path. Default: transcript/<stem>.zh.json",
+        help="Output translated transcript JSON path. Default: transcript/<stem>.<target>.json",
     )
     parser.add_argument(
         "--output-txt",
@@ -115,7 +121,17 @@ def extract_json_array(text: str) -> list[dict[str, Any]]:
     return candidates[-1]
 
 
-def build_prompt(source_language: str, segments: list[dict[str, Any]]) -> str:
+def target_spec(target_language: str) -> tuple[str, str, str]:
+    if target_language == "en":
+        return ("English", "natural, faithful English subtitle text suitable for reading aloud", "English")
+    return ("Simplified Chinese", "natural Simplified Chinese suitable for reading aloud", "Chinese")
+
+
+def target_text_key(target_language: str) -> str:
+    return "en_text" if target_language == "en" else "zh_text"
+
+
+def build_prompt(source_language: str, target_language: str, segments: list[dict[str, Any]]) -> str:
     source_payload = [
         {
             "index": segment["index"],
@@ -125,13 +141,28 @@ def build_prompt(source_language: str, segments: list[dict[str, Any]]) -> str:
         }
         for segment in segments
     ]
+    target_name, target_instruction, example_translation = target_spec(target_language)
+    examples = ""
+    if target_language == "en":
+        examples = (
+            "Faithful Chinese-to-English examples:\n"
+            "[{\"index\":1,\"text\":\"这个进球非常漂亮。\"}] -> "
+            "[{\"index\":1,\"translation\":\"That was a beautiful goal.\"}]\n"
+            "[{\"index\":2,\"text\":\"大家好，欢迎来到今天的比赛现场。\"}] -> "
+            "[{\"index\":2,\"translation\":\"Hello everyone, welcome to today's match.\"}]\n"
+        )
     return (
         "You are a subtitle and voice-over translator.\n"
-        "Translate transcript segments into natural Simplified Chinese suitable for reading aloud.\n"
+        f"Translate transcript segments into {target_instruction}.\n"
         "Keep translations concise and fluent. Preserve names, places, numbers, and factual meaning.\n"
+        "Translate the source meaning faithfully; do not answer the speaker, summarize loosely, or invent new content.\n"
+        "Keep each output aligned to its input segment index.\n"
+        "If the source is already close to the target language, rewrite it into clean subtitle wording instead of copying errors.\n"
         "Return only valid JSON. Do not add markdown.\n"
-        'The JSON must be an array of objects like {"index": 1, "translation": "中文"}.\n'
+        f'The JSON must be an array of objects like {{"index": 1, "translation": "{example_translation}"}}.\n'
         f"Source language hint: {source_language}\n"
+        f"Target language: {target_name}\n"
+        f"{examples}"
         "Segments:\n"
         + json.dumps(source_payload, ensure_ascii=False)
     )
@@ -187,12 +218,13 @@ def translate_batch(
     llama_cli: str,
     model: Path,
     source_language: str,
+    target_language: str,
     segments: list[dict[str, Any]],
     ctx_size: int,
     threads: int | None,
     gpu_layers: str,
 ) -> list[dict[str, Any]]:
-    prompt = build_prompt(source_language, segments)
+    prompt = build_prompt(source_language, target_language, segments)
     output = run_llama_cli(
         llama_cli=llama_cli,
         model=model,
@@ -221,6 +253,7 @@ def repair_mojibake(text: str) -> str:
 def merge_translations(
     source_segments: list[dict[str, Any]],
     translated_items: list[dict[str, Any]],
+    target_language: str,
 ) -> list[dict[str, Any]]:
     translations_by_index = {
         int(item["index"]): repair_mojibake(str(item["translation"]).strip())
@@ -232,16 +265,18 @@ def merge_translations(
     if missing:
         raise ValueError(f"Translation response is missing segment indexes: {missing}")
 
-    return [
-        {
+    field_name = target_text_key(target_language)
+    merged_segments: list[dict[str, Any]] = []
+    for segment in source_segments:
+        item = {
             "index": segment["index"],
             "start": segment["start"],
             "end": segment["end"],
             "source_text": segment["text"],
-            "zh_text": translations_by_index[segment["index"]],
         }
-        for segment in source_segments
-    ]
+        item[field_name] = translations_by_index[segment["index"]]
+        merged_segments.append(item)
+    return merged_segments
 
 
 def write_outputs(
@@ -251,16 +286,19 @@ def write_outputs(
     json_path: Path,
     txt_path: Path,
     model: Path,
+    target_language: str,
 ) -> None:
     json_path.parent.mkdir(parents=True, exist_ok=True)
     txt_path.parent.mkdir(parents=True, exist_ok=True)
 
+    field_name = target_text_key(target_language)
+    target_label = "EN" if target_language == "en" else "ZH"
     payload = {
         "metadata": {
             **source_payload.get("metadata", {}),
             "translation_backend": "llama-cli",
             "translation_model": str(model),
-            "target_language": "zh",
+            "target_language": target_language,
         },
         "segments": translated_segments,
     }
@@ -272,7 +310,7 @@ def write_outputs(
             [
                 f"[{segment['index']:05}] {segment['start']:.2f} --> {segment['end']:.2f}",
                 f"SRC: {segment['source_text']}",
-                f"ZH : {segment['zh_text']}",
+                f"{target_label} : {segment[field_name]}",
                 "",
             ]
         )
@@ -313,6 +351,7 @@ def main() -> int:
                 llama_cli=args.llama_cli,
                 model=model_path,
                 source_language=language,
+                target_language=args.target_language,
                 segments=batch,
                 ctx_size=args.ctx_size,
                 threads=args.threads,
@@ -320,9 +359,9 @@ def main() -> int:
             )
         )
 
-    translated_segments = merge_translations(source_segments, all_translated_items)
+    translated_segments = merge_translations(source_segments, all_translated_items, args.target_language)
     stem = output_stem(input_path)
-    json_path = args.output_json or stem.with_suffix(".zh.json")
+    json_path = args.output_json or stem.with_suffix(f".{args.target_language}.json")
     txt_path = args.output_txt or stem.with_suffix(".bilingual.txt")
     write_outputs(
         source_payload=source_payload,
@@ -330,6 +369,7 @@ def main() -> int:
         json_path=json_path,
         txt_path=txt_path,
         model=model_path,
+        target_language=args.target_language,
     )
 
     print(f"Wrote: {json_path}")

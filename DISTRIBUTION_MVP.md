@@ -12,8 +12,9 @@ Keep:
 - first-frame preview and subtitle position picking
 - transcription with faster-whisper
 - offline translation with `llama-cli`
+- Chinese and English subtitle targets
 - translation review window
-- Chinese-only and bilingual subtitle burn-in
+- target-language-only and bilingual subtitle burn-in
 - floating watermark
 - per-video output folders under `output/<video_name>/`
 
@@ -105,7 +106,7 @@ Later, after the workflow stabilizes, consider:
 - A sample video can be added to the queue.
 - First-frame preview appears.
 - Custom subtitle position can be selected by clicking preview.
-- Pipeline produces `output/<video_name>/<video_name>_bilingual_subs.mp4`.
+- Pipeline produces `output/<video_name>/<video_name>_zh_subs.mp4` or `output/<video_name>/<video_name>_en_subs.mp4`.
 - Translation review can save edits and rebuild SRT/ASS.
 - Re-running after review rebuilds the rendered video.
 

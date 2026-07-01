@@ -20,7 +20,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="One-step pipeline: video -> transcript -> Chinese translation -> bilingual ASS -> burned-in video."
+        description="One-step pipeline: video -> transcript/SRT -> local translation -> subtitle files -> burned-in video."
     )
     parser.add_argument("input", type=Path, help="Path to source video.")
     parser.add_argument(
@@ -40,6 +40,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=4,
         help="Segments per local translation request. Default: 4",
+    )
+    parser.add_argument(
+        "--target-language",
+        choices=["zh", "en"],
+        default="zh",
+        help="Translation target language. Use zh for Chinese subtitles or en for English subtitles. Default: zh",
     )
     parser.add_argument("--force", action="store_true", help="Rebuild all intermediate files.")
     parser.add_argument("--skip-render", action="store_true", help="Build subtitle files but do not render video.")
@@ -66,12 +72,12 @@ def parse_args() -> argparse.Namespace:
         "--subtitle-position",
         choices=["upper", "center", "lower"],
         default="center",
-        help="Chinese subtitle vertical position. Default: center",
+        help="Target-language subtitle vertical position. Default: center",
     )
     parser.add_argument(
         "--subtitle-y",
         type=float,
-        help="Exact Chinese subtitle vertical fraction from 0.05 to 0.90. Overrides --subtitle-position.",
+        help="Exact target-language subtitle vertical fraction from 0.05 to 0.90. Overrides --subtitle-position.",
     )
     parser.add_argument(
         "--source-y",
@@ -155,11 +161,11 @@ def main() -> int:
     artifact_dir = PROJECT_ROOT / "output" / stem
     artifact_dir.mkdir(parents=True, exist_ok=True)
     transcript_json = artifact_dir / f"{stem}.segments.json"
-    translated_json = artifact_dir / f"{stem}.zh.json"
+    translated_json = artifact_dir / f"{stem}.{args.target_language}.json"
     bilingual_txt = artifact_dir / f"{stem}.bilingual.txt"
     bilingual_srt = artifact_dir / f"{stem}.bilingual.srt"
     bilingual_ass = artifact_dir / f"{stem}.bilingual.ass"
-    output_video = artifact_dir / f"{stem}_bilingual_subs.mp4"
+    output_video = artifact_dir / f"{stem}_{args.target_language}_subs.mp4"
 
     streams = subtitle_streams(input_path, args.ffprobe)
     if streams:
@@ -215,6 +221,8 @@ def main() -> int:
                 args.translation_gpu_layers,
                 "--batch-size",
                 str(args.translation_batch_size),
+                "--target-language",
+                args.target_language,
                 "--output-json",
                 str(translated_json),
                 "--output-txt",

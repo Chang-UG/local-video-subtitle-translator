@@ -37,6 +37,11 @@ LANGUAGES = [
 LANGUAGE_LABELS = [f"{code} · {name}" for code, name in LANGUAGES]
 LANGUAGE_CODES = {label: code for label, (code, _name) in zip(LANGUAGE_LABELS, LANGUAGES)}
 
+TRANSLATION_TARGETS = {
+    "Chinese (zh)": "zh",
+    "English (en)": "en",
+}
+
 SUBTITLE_MODES = {
     "仅中文": "chinese",
     "双语": "bilingual",
@@ -76,17 +81,19 @@ def artifact_dir_for(input_path: Path) -> Path:
     return PROJECT_ROOT / "output" / input_path.stem
 
 
-def artifact_paths(input_path: Path) -> dict[str, Path]:
+def artifact_paths(input_path: Path, target_language: str = "zh") -> dict[str, Path]:
     stem = input_path.stem
     out_dir = artifact_dir_for(input_path)
+    translated_json = out_dir / f"{stem}.{target_language}.json"
     return {
         "dir": out_dir,
         "segments": out_dir / f"{stem}.segments.json",
-        "zh": out_dir / f"{stem}.zh.json",
+        "translated": translated_json,
+        "zh": translated_json,
         "txt": out_dir / f"{stem}.bilingual.txt",
         "srt": out_dir / f"{stem}.bilingual.srt",
         "ass": out_dir / f"{stem}.bilingual.ass",
-        "video": out_dir / f"{stem}_bilingual_subs.mp4",
+        "video": out_dir / f"{stem}_{target_language}_subs.mp4",
         "preview_frame": out_dir / f"{stem}.preview.png",
         "preview_clip": out_dir / f"{stem}.preview_5s.mp4",
     }
@@ -103,6 +110,8 @@ def build_pipeline_command(args: argparse.Namespace) -> list[str]:
         args.translation_gpu_layers,
         "--translation-batch-size",
         str(args.translation_batch_size),
+        "--target-language",
+        args.target_language,
         "--subtitle-mode",
         args.subtitle_mode,
         "--subtitle-position",
@@ -138,21 +147,22 @@ def run_pipeline(args: argparse.Namespace) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Video to Chinese subtitle pipeline.")
+    parser = argparse.ArgumentParser(description="Local video subtitle translation pipeline.")
     parser.add_argument("input", nargs="?", type=Path, help="Source audio/video file. Omit to open the GUI.")
     parser.add_argument("--gui", action="store_true", help="Open the GUI.")
     parser.add_argument("--language", choices=[code for code, _name in LANGUAGES], default="auto", help="Source language.")
+    parser.add_argument("--target-language", choices=["zh", "en"], default="zh", help="Translation target language.")
     parser.add_argument(
         "--subtitle-mode",
         choices=["chinese", "bilingual"],
         default="chinese",
-        help="Burn Chinese-only or bilingual subtitles.",
+        help="Burn target-language-only or bilingual subtitles.",
     )
     parser.add_argument(
         "--subtitle-position",
         choices=["upper", "center", "lower"],
         default="center",
-        help="Chinese subtitle vertical position.",
+        help="Target-language subtitle vertical position.",
     )
     parser.add_argument("--subtitle-y", type=float, help="Exact subtitle vertical fraction from 0.05 to 0.90.")
     parser.add_argument("--source-y", type=float, help="Exact source subtitle vertical fraction from 0.05 to 0.90.")
@@ -175,8 +185,11 @@ class TranslationReviewWindow:
     def __init__(self, app: PipelineGui, input_path: Path) -> None:
         self.app = app
         self.input_path = input_path
-        self.paths = artifact_paths(input_path)
+        self.paths = artifact_paths(input_path, app.target_language())
         self.path = self.paths["zh"]
+        self.target_language = app.target_language()
+        self.target_field = "en_text" if self.target_language == "en" else "zh_text"
+        self.target_label = "英文字幕" if self.target_language == "en" else "中文字幕"
         self.payload: dict = {}
         self.segments: list[dict] = []
         self.current_index: int | None = None
@@ -207,20 +220,20 @@ class TranslationReviewWindow:
         root.columnconfigure(1, weight=1)
         root.rowconfigure(1, weight=1)
 
-        ttk.Label(root, text="逐条检查转写和中文字幕，保存后会重新生成 SRT/ASS。", style="TLabel").grid(
+        ttk.Label(root, text=f"逐条检查转写和{self.target_label}，保存后会重新生成 SRT/ASS。", style="TLabel").grid(
             row=0, column=0, columnspan=2, sticky="ew", padx=16, pady=(14, 8)
         )
 
-        columns = ("index", "time", "source", "zh")
+        columns = ("index", "time", "source", "target")
         self.tree = ttk.Treeview(root, columns=columns, show="headings", height=18)
         for col, label, width in [
             ("index", "#", 50),
             ("time", "时间", 120),
             ("source", "原文", 300),
-            ("zh", "中文", 360),
+            ("target", self.target_label, 360),
         ]:
             self.tree.heading(col, text=label)
-            self.tree.column(col, width=width, stretch=col in {"source", "zh"})
+            self.tree.column(col, width=width, stretch=col in {"source", "target"})
         self.tree.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=16, pady=(0, 12))
         self.tree.bind("<<TreeviewSelect>>", self._select_row)
 
@@ -233,7 +246,7 @@ class TranslationReviewWindow:
                     segment.get("index"),
                     f"{segment.get('start', 0):.2f}-{segment.get('end', 0):.2f}",
                     segment.get("source_text", ""),
-                    segment.get("zh_text", ""),
+                    segment.get(self.target_field, ""),
                 ),
             )
 
@@ -245,11 +258,11 @@ class TranslationReviewWindow:
         edit_frame.columnconfigure(1, weight=1)
 
         ttk.Label(edit_frame, text="原文").grid(row=0, column=0, sticky="w")
-        ttk.Label(edit_frame, text="中文字幕").grid(row=0, column=1, sticky="w")
+        ttk.Label(edit_frame, text=self.target_label).grid(row=0, column=1, sticky="w")
         self.source_text = tk.Text(edit_frame, height=5, wrap="word", bg="#0f1217", fg="#d6dde7", relief="flat")
-        self.zh_text = tk.Text(edit_frame, height=5, wrap="word", bg="#0f1217", fg="#d6dde7", relief="flat")
+        self.target_text = tk.Text(edit_frame, height=5, wrap="word", bg="#0f1217", fg="#d6dde7", relief="flat")
         self.source_text.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=(4, 10))
-        self.zh_text.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=(4, 10))
+        self.target_text.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=(4, 10))
 
         button_row = ttk.Frame(edit_frame)
         button_row.grid(row=2, column=0, columnspan=2, sticky="ew")
@@ -280,16 +293,16 @@ class TranslationReviewWindow:
         if not segment:
             return
         self.source_text.delete("1.0", "end")
-        self.zh_text.delete("1.0", "end")
+        self.target_text.delete("1.0", "end")
         self.source_text.insert("1.0", segment.get("source_text", ""))
-        self.zh_text.insert("1.0", segment.get("zh_text", ""))
+        self.target_text.insert("1.0", segment.get(self.target_field, ""))
 
     def save_current(self) -> None:
         segment = self._selected_segment()
         if not segment:
             return
         segment["source_text"] = self.source_text.get("1.0", "end").strip()
-        segment["zh_text"] = self.zh_text.get("1.0", "end").strip()
+        segment[self.target_field] = self.target_text.get("1.0", "end").strip()
         iid = str(segment.get("index"))
         self.tree.item(
             iid,
@@ -297,7 +310,7 @@ class TranslationReviewWindow:
                 segment.get("index"),
                 f"{segment.get('start', 0):.2f}-{segment.get('end', 0):.2f}",
                 segment.get("source_text", ""),
-                segment.get("zh_text", ""),
+                segment.get(self.target_field, ""),
             ),
         )
 
@@ -341,7 +354,7 @@ class TranslationReviewWindow:
                     segment.get("index"),
                     f"{segment.get('start', 0):.2f}-{segment.get('end', 0):.2f}",
                     segment.get("source_text", ""),
-                    segment.get("zh_text", ""),
+                    segment.get(self.target_field, ""),
                 ),
             )
 
@@ -361,6 +374,7 @@ class PipelineGui:
         self.external_srt_files: dict[Path, Path] = {}
         self.file_path = StringVar()
         self.language_label = StringVar(value=LANGUAGE_LABELS[0])
+        self.target_language_label = StringVar(value="Chinese (zh)")
         self.subtitle_mode_label = StringVar(value="仅中文")
         self.subtitle_position_label = StringVar(value="中间")
         self.subtitle_source_label = StringVar(value="从视频音轨转写")
@@ -454,8 +468,15 @@ class PipelineGui:
             state="readonly",
             width=30,
         ).grid(row=3, column=0, sticky="ew", pady=(4, 12))
+        ttk.Combobox(
+            controls,
+            textvariable=self.target_language_label,
+            values=list(TRANSLATION_TARGETS),
+            state="readonly",
+            width=30,
+        ).grid(row=4, column=0, sticky="ew", pady=(0, 12))
 
-        self._section_label(controls, "字幕", 4)
+        self._section_label(controls, "字幕", 5)
         mode_combo = ttk.Combobox(
             controls,
             textvariable=self.subtitle_mode_label,
@@ -463,7 +484,7 @@ class PipelineGui:
             state="readonly",
             width=30,
         )
-        mode_combo.grid(row=5, column=0, sticky="ew", pady=(4, 8))
+        mode_combo.grid(row=6, column=0, sticky="ew", pady=(4, 8))
         mode_combo.bind("<<ComboboxSelected>>", self._subtitle_mode_changed)
         position_combo = ttk.Combobox(
             controls,
@@ -472,13 +493,13 @@ class PipelineGui:
             state="readonly",
             width=30,
         )
-        position_combo.grid(row=6, column=0, sticky="ew", pady=(0, 6))
+        position_combo.grid(row=7, column=0, sticky="ew", pady=(0, 6))
         position_combo.bind("<<ComboboxSelected>>", self._position_combo_changed)
         self.position_hint_label = ttk.Label(controls, textvariable=self.position_hint, style="Muted.TLabel")
-        self.position_hint_label.grid(row=7, column=0, sticky="w", pady=(0, 12))
+        self.position_hint_label.grid(row=8, column=0, sticky="w", pady=(0, 12))
         self.position_hint_label.grid_remove()
 
-        self._section_label(controls, "字幕来源", 8)
+        self._section_label(controls, "字幕来源", 9)
         source_combo = ttk.Combobox(
             controls,
             textvariable=self.subtitle_source_label,
@@ -486,34 +507,34 @@ class PipelineGui:
             state="readonly",
             width=30,
         )
-        source_combo.grid(row=9, column=0, sticky="ew", pady=(4, 6))
+        source_combo.grid(row=10, column=0, sticky="ew", pady=(4, 6))
         source_combo.bind("<<ComboboxSelected>>", self._subtitle_source_changed)
-        ttk.Button(controls, text="选择当前视频的 SRT", command=self.choose_srt_for_selected).grid(row=10, column=0, sticky="ew", pady=(0, 4))
-        ttk.Label(controls, textvariable=self.source_srt_status, style="Muted.TLabel").grid(row=11, column=0, sticky="w", pady=(0, 12))
+        ttk.Button(controls, text="选择当前视频的 SRT", command=self.choose_srt_for_selected).grid(row=11, column=0, sticky="ew", pady=(0, 4))
+        ttk.Label(controls, textvariable=self.source_srt_status, style="Muted.TLabel").grid(row=12, column=0, sticky="w", pady=(0, 12))
 
-        self._section_label(controls, "输出策略", 12)
+        self._section_label(controls, "输出策略", 13)
         ttk.Combobox(
             controls,
             textvariable=self.render_policy_label,
             values=list(RENDER_POLICIES),
             state="readonly",
             width=30,
-        ).grid(row=13, column=0, sticky="ew", pady=(4, 8))
+        ).grid(row=14, column=0, sticky="ew", pady=(4, 8))
 
-        self._section_label(controls, "选项", 14)
-        ttk.Checkbutton(controls, text="使用 GPU 翻译", variable=self.gpu).grid(row=15, column=0, sticky="w", pady=2)
-        ttk.Checkbutton(controls, text="重新生成全部文件", variable=self.force).grid(row=16, column=0, sticky="w", pady=2)
-        ttk.Checkbutton(controls, text="浮动水印", variable=self.use_watermark).grid(row=17, column=0, sticky="w", pady=(8, 3))
-        ttk.Entry(controls, textvariable=self.watermark).grid(row=18, column=0, sticky="ew", pady=(0, 12))
+        self._section_label(controls, "选项", 15)
+        ttk.Checkbutton(controls, text="使用 GPU 翻译", variable=self.gpu).grid(row=16, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(controls, text="重新生成全部文件", variable=self.force).grid(row=17, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(controls, text="浮动水印", variable=self.use_watermark).grid(row=18, column=0, sticky="w", pady=(8, 3))
+        ttk.Entry(controls, textvariable=self.watermark).grid(row=19, column=0, sticky="ew", pady=(0, 12))
 
-        ttk.Button(controls, text="打开翻译校对", command=self.open_translation_review).grid(row=19, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(controls, text="渲染当前视频", command=self.render_selected).grid(row=20, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(controls, text="打开翻译校对", command=self.open_translation_review).grid(row=20, column=0, sticky="ew", pady=(0, 8))
+        ttk.Button(controls, text="渲染当前视频", command=self.render_selected).grid(row=21, column=0, sticky="ew", pady=(0, 8))
         self.run_button = ttk.Button(controls, text="开始处理队列", style="Accent.TButton", command=self.start)
-        self.run_button.grid(row=21, column=0, sticky="ew")
+        self.run_button.grid(row=22, column=0, sticky="ew")
 
-        self._section_label(controls, "流程", 22)
+        self._section_label(controls, "流程", 23)
         steps = ttk.Frame(controls, style="Panel.TFrame")
-        steps.grid(row=23, column=0, sticky="ew", pady=(4, 0))
+        steps.grid(row=24, column=0, sticky="ew", pady=(4, 0))
         for row, (key, name) in enumerate(PIPELINE_STEPS):
             var = StringVar(value=f"○ {name}")
             label = ttk.Label(steps, textvariable=var, style="Muted.TLabel")
@@ -708,7 +729,7 @@ class PipelineGui:
         if not path:
             messagebox.showinfo("暂无素材", "请先添加一个视频。")
             return
-        target = artifact_paths(path)["video"] if rendered else path
+        target = artifact_paths(path, self.target_language())["video"] if rendered else path
         if not target.exists():
             messagebox.showinfo("暂无成片", f"还没有找到：\n{target}")
             return
@@ -718,7 +739,7 @@ class PipelineGui:
         if not DEFAULT_FFMPEG.exists():
             self.status.set("未找到 ffmpeg，无法生成预览")
             return
-        paths = artifact_paths(media_path)
+        paths = artifact_paths(media_path, self.target_language())
         preview_path = paths["preview_frame"]
         preview_path.parent.mkdir(parents=True, exist_ok=True)
         command = [
@@ -759,11 +780,12 @@ class PipelineGui:
         if not path:
             messagebox.showinfo("暂无素材", "请先添加一个视频。")
             return
-        rendered = artifact_paths(path)["video"]
+        paths = artifact_paths(path, self.target_language())
+        rendered = paths["video"]
         if not rendered.exists():
             messagebox.showinfo("暂无成片", "还没有渲染好的成片，先跑完队列再生成预览片段。")
             return
-        output = artifact_paths(path)["preview_clip"]
+        output = paths["preview_clip"]
         command = [str(DEFAULT_FFMPEG), "-y", "-hide_banner", "-i", str(rendered), "-t", "5", "-c", "copy", str(output)]
         completed = subprocess.run(command, cwd=PROJECT_ROOT, check=False, capture_output=True, text=True)
         if completed.returncode != 0:
@@ -879,12 +901,16 @@ class PipelineGui:
     def is_bilingual_mode(self) -> bool:
         return SUBTITLE_MODES.get(self.subtitle_mode_label.get()) == "bilingual"
 
+    def target_language(self) -> str:
+        return TRANSLATION_TARGETS.get(self.target_language_label.get(), "zh")
+
     def build_args_for(self, input_path: Path) -> argparse.Namespace:
         position_label = self.subtitle_position_label.get()
         subtitle_position = SUBTITLE_POSITIONS.get(position_label, ("center", self.subtitle_y.get()))[0]
         return argparse.Namespace(
             input=input_path,
             language=LANGUAGE_CODES[self.language_label.get()],
+            target_language=self.target_language(),
             subtitle_mode=SUBTITLE_MODES[self.subtitle_mode_label.get()],
             subtitle_position=subtitle_position,
             subtitle_y=self.subtitle_y.get(),
@@ -935,7 +961,7 @@ class PipelineGui:
         if not path:
             messagebox.showinfo("暂无素材", "请先从队列里选择一个视频。")
             return
-        paths = artifact_paths(path)
+        paths = artifact_paths(path, self.target_language())
         if not paths["zh"].exists() or not paths["ass"].exists():
             messagebox.showinfo("还不能渲染", "还没有翻译 JSON 和字幕文件。请先处理队列到翻译/字幕文件阶段。")
             return

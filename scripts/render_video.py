@@ -27,12 +27,12 @@ def parse_args() -> argparse.Namespace:
         "--subtitle-position",
         choices=["upper", "center", "lower"],
         default="center",
-        help="Chinese subtitle vertical position. Default: center",
+        help="Target-language subtitle vertical position. Default: center",
     )
     parser.add_argument(
         "--subtitle-y",
         type=float,
-        help="Exact Chinese subtitle vertical fraction from 0.05 to 0.90. Overrides --subtitle-position.",
+        help="Exact target-language subtitle vertical fraction from 0.05 to 0.90. Overrides --subtitle-position.",
     )
     parser.add_argument(
         "--source-y",
@@ -67,12 +67,20 @@ def drawtext_escape(path: Path) -> str:
     return path.resolve().as_posix().replace(":", "\\:")
 
 
-def load_segments(path: Path) -> list[dict[str, Any]]:
+def load_payload(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     segments = payload.get("segments")
     if not isinstance(segments, list):
         raise ValueError(f"Invalid translated transcript JSON: {path}")
-    return segments
+    return payload
+
+
+def target_language(payload: dict[str, Any]) -> str:
+    return str(payload.get("metadata", {}).get("target_language", "zh"))
+
+
+def target_text_key(language: str) -> str:
+    return "en_text" if language == "en" else "zh_text"
 
 
 def write_text_file(path: Path, text: str) -> None:
@@ -103,6 +111,12 @@ def wrap_chinese(text: str) -> str:
     return "\n".join(lines)
 
 
+def wrap_target(text: str, language: str) -> str:
+    if language == "en":
+        return wrap_source(text)
+    return wrap_chinese(text)
+
+
 def subtitle_y_expr(position: str, exact_y: float | None = None) -> str:
     if exact_y is not None:
         clamped = min(0.90, max(0.05, exact_y))
@@ -127,7 +141,10 @@ def build_drawtext_script(
 ) -> Path:
     source_font = Path("C:/Windows/Fonts/arial.ttf")
     chinese_font = Path("C:/Windows/Fonts/msyh.ttc")
-    segments = load_segments(json_path)
+    payload = load_payload(json_path)
+    segments = payload["segments"]
+    language = target_language(payload)
+    field_name = target_text_key(language)
     text_dir = work_dir / json_path.stem.replace(".zh", "")
     zh_y = subtitle_y_expr(subtitle_position, subtitle_y)
     src_y = subtitle_y_expr("upper", source_y if source_y is not None else 0.34)
@@ -137,8 +154,8 @@ def build_drawtext_script(
         index = int(segment["index"])
         start = float(segment["start"])
         end = float(segment["end"])
-        zh_file = text_dir / f"{index:05}_zh.txt"
-        write_text_file(zh_file, wrap_chinese(segment.get("zh_text", "")))
+        target_file = text_dir / f"{index:05}_{language}.txt"
+        write_text_file(target_file, wrap_target(segment.get(field_name, ""), language))
         enable = f"gte(t\\,{start:.3f})*lt(t\\,{end:.3f})"
         if mode == "bilingual":
             src_file = text_dir / f"{index:05}_src.txt"
@@ -157,7 +174,7 @@ def build_drawtext_script(
         filters.append(
             "drawtext="
             f"fontfile='{drawtext_escape(chinese_font)}':"
-            f"textfile='{drawtext_escape(zh_file)}':"
+            f"textfile='{drawtext_escape(target_file)}':"
             "expansion=none:"
             "fontsize=30:fontcolor=yellow:"
             "borderw=2:bordercolor=black:"
