@@ -119,6 +119,10 @@ def build_output_stem(input_path: Path, output_dir: Path) -> Path:
     return output_dir / input_path.stem
 
 
+def output_path(output_stem: Path, suffix: str) -> Path:
+    return output_stem.with_name(f"{output_stem.name}{suffix}")
+
+
 def main() -> int:
     args = parse_args()
     input_path = args.input.expanduser().resolve()
@@ -156,14 +160,18 @@ def main() -> int:
         "duration": info.duration,
     }
 
-    write_txt(output_stem.with_suffix(".txt"), segments)
-    write_srt(output_stem.with_suffix(".srt"), segments)
-    write_json(output_stem.with_suffix(".segments.json"), metadata, segments)
+    txt_path = output_path(output_stem, ".txt")
+    srt_path = output_path(output_stem, ".srt")
+    json_path = output_path(output_stem, ".segments.json")
+
+    write_txt(txt_path, segments)
+    write_srt(srt_path, segments)
+    write_json(json_path, metadata, segments)
 
     print(f"Detected language: {info.language} ({info.language_probability:.2%})")
-    print(f"Wrote: {output_stem.with_suffix('.txt')}")
-    print(f"Wrote: {output_stem.with_suffix('.srt')}")
-    print(f"Wrote: {output_stem.with_suffix('.segments.json')}")
+    print(f"Wrote: {txt_path}")
+    print(f"Wrote: {srt_path}")
+    print(f"Wrote: {json_path}")
     return 0
 
 
