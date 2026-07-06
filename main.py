@@ -110,6 +110,8 @@ def build_pipeline_command(args: argparse.Namespace) -> list[str]:
         args.translation_gpu_layers,
         "--translation-batch-size",
         str(args.translation_batch_size),
+        "--translation-max-tokens",
+        str(args.translation_max_tokens),
         "--target-language",
         args.target_language,
         "--subtitle-mode",
@@ -175,7 +177,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-srt", type=Path, help="External source-language SRT file.")
     parser.add_argument("--watermark", default=DEFAULT_WATERMARK, help="Floating watermark text. Use empty string to disable.")
     parser.add_argument("--translation-gpu-layers", default="auto", help="llama.cpp GPU layers. Default: auto")
-    parser.add_argument("--translation-batch-size", type=int, default=4, help="Translation batch size. Default: 4")
+    parser.add_argument("--translation-batch-size", type=int, default=8, help="Translation batch size. Default: 8")
+    parser.add_argument("--translation-max-tokens", type=int, default=768, help="Translation max tokens per request. Default: 768")
     parser.add_argument("--force", action="store_true", help="Rebuild intermediate files.")
     parser.add_argument("--skip-render", action="store_true", help="Build subtitles but skip video render.")
     return parser.parse_args()
@@ -919,7 +922,8 @@ class PipelineGui:
             source_srt=self.external_srt_files.get(input_path),
             watermark=self.watermark.get() if self.use_watermark.get() else "",
             translation_gpu_layers="auto" if self.gpu.get() else "0",
-            translation_batch_size=4,
+            translation_batch_size=8,
+            translation_max_tokens=768,
             force=self.force.get(),
             skip_render=RENDER_POLICIES[self.render_policy_label.get()],
         )

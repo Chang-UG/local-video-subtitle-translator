@@ -38,8 +38,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--translation-batch-size",
         type=int,
-        default=4,
-        help="Segments per local translation request. Default: 4",
+        default=8,
+        help="Segments per local translation request. Default: 8",
+    )
+    parser.add_argument(
+        "--translation-max-tokens",
+        type=int,
+        default=768,
+        help="Maximum tokens generated per translation request. Default: 768",
     )
     parser.add_argument(
         "--target-language",
@@ -221,6 +227,8 @@ def main() -> int:
                 args.translation_gpu_layers,
                 "--batch-size",
                 str(args.translation_batch_size),
+                "--max-tokens",
+                str(args.translation_max_tokens),
                 "--target-language",
                 args.target_language,
                 "--output-json",

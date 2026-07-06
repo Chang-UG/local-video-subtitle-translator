@@ -36,14 +36,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=4,
-        help="Segments per llama-cli request. Smaller is more reliable; larger gives more context. Default: 4",
+        default=8,
+        help="Segments per llama-cli request. Smaller is more reliable; larger is faster. Default: 8",
     )
     parser.add_argument(
         "--ctx-size",
         type=int,
         default=4096,
         help="llama.cpp context size. Default: 4096",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=768,
+        help="Maximum tokens generated per translation request. Default: 768",
     )
     parser.add_argument(
         "--threads",
@@ -174,6 +180,7 @@ def run_llama_cli(
     model: Path,
     prompt: str,
     ctx_size: int,
+    max_tokens: int,
     threads: int | None,
     gpu_layers: str,
 ) -> str:
@@ -184,7 +191,7 @@ def run_llama_cli(
         "-p",
         prompt,
         "-n",
-        "2048",
+        str(max_tokens),
         "--ctx-size",
         str(ctx_size),
         "--temp",
@@ -221,6 +228,7 @@ def translate_batch(
     target_language: str,
     segments: list[dict[str, Any]],
     ctx_size: int,
+    max_tokens: int,
     threads: int | None,
     gpu_layers: str,
 ) -> list[dict[str, Any]]:
@@ -230,6 +238,7 @@ def translate_batch(
         model=model,
         prompt=prompt,
         ctx_size=ctx_size,
+        max_tokens=max_tokens,
         threads=threads,
         gpu_layers=gpu_layers,
     )
@@ -237,6 +246,82 @@ def translate_batch(
     if len(segments) == 1 and len(translated) == 1:
         translated[0]["index"] = segments[0]["index"]
     return translated
+
+
+def translated_indexes(items: list[dict[str, Any]]) -> set[int]:
+    indexes: set[int] = set()
+    for item in items:
+        try:
+            indexes.add(int(item["index"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return indexes
+
+
+def translate_batch_resilient(
+    *,
+    llama_cli: str,
+    model: Path,
+    source_language: str,
+    target_language: str,
+    segments: list[dict[str, Any]],
+    ctx_size: int,
+    max_tokens: int,
+    threads: int | None,
+    gpu_layers: str,
+) -> list[dict[str, Any]]:
+    try:
+        translated = translate_batch(
+            llama_cli=llama_cli,
+            model=model,
+            source_language=source_language,
+            target_language=target_language,
+            segments=segments,
+            ctx_size=ctx_size,
+            max_tokens=max_tokens,
+            threads=threads,
+            gpu_layers=gpu_layers,
+        )
+    except ValueError:
+        if len(segments) == 1:
+            raise
+        translated = []
+    expected = {int(segment["index"]) for segment in segments}
+    if expected.issubset(translated_indexes(translated)):
+        return translated
+    if len(segments) == 1:
+        return translated
+
+    midpoint = len(segments) // 2
+    print(
+        "Translation response missed segment indexes; retrying smaller batches "
+        f"({len(segments[:midpoint])} + {len(segments[midpoint:])})",
+        flush=True,
+    )
+    return [
+        *translate_batch_resilient(
+            llama_cli=llama_cli,
+            model=model,
+            source_language=source_language,
+            target_language=target_language,
+            segments=segments[:midpoint],
+            ctx_size=ctx_size,
+            max_tokens=max_tokens,
+            threads=threads,
+            gpu_layers=gpu_layers,
+        ),
+        *translate_batch_resilient(
+            llama_cli=llama_cli,
+            model=model,
+            source_language=source_language,
+            target_language=target_language,
+            segments=segments[midpoint:],
+            ctx_size=ctx_size,
+            max_tokens=max_tokens,
+            threads=threads,
+            gpu_layers=gpu_layers,
+        ),
+    ]
 
 
 def repair_mojibake(text: str) -> str:
@@ -331,6 +416,9 @@ def main() -> int:
     if args.batch_size < 1:
         print("--batch-size must be at least 1", file=sys.stderr)
         return 2
+    if args.max_tokens < 128:
+        print("--max-tokens must be at least 128", file=sys.stderr)
+        return 2
     if shutil.which(args.llama_cli) is None and not Path(args.llama_cli).exists():
         print(
             "llama-cli was not found. Install llama.cpp or pass --llama-cli path\\to\\llama-cli.exe",
@@ -345,15 +433,16 @@ def main() -> int:
     all_translated_items: list[dict[str, Any]] = []
     batches = chunked(source_segments, args.batch_size)
     for batch_index, batch in enumerate(batches, start=1):
-        print(f"Translating batch {batch_index}/{len(batches)} ({len(batch)} segments)")
+        print(f"Translating batch {batch_index}/{len(batches)} ({len(batch)} segments)", flush=True)
         all_translated_items.extend(
-            translate_batch(
+            translate_batch_resilient(
                 llama_cli=args.llama_cli,
                 model=model_path,
                 source_language=language,
                 target_language=args.target_language,
                 segments=batch,
                 ctx_size=args.ctx_size,
+                max_tokens=args.max_tokens,
                 threads=args.threads,
                 gpu_layers=args.gpu_layers,
             )
