@@ -15,12 +15,14 @@ New-Item -ItemType Directory -Path $staging | Out-Null
 
 $files = @(
     "main.py",
+    "transcript.py",
     "README.md",
     "DISTRIBUTION_MVP.md",
     "environment.yml",
     "requirements.txt",
     "install_env.bat",
-    "run_gui.bat"
+    "run_gui.bat",
+    "run_transcript.bat"
 )
 
 foreach ($file in $files) {

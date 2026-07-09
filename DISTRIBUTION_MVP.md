@@ -7,6 +7,7 @@ This is the smallest practical packaging target for sharing the app with another
 Keep:
 
 - GUI workbench in `main.py`
+- transcript-only GUI in `transcript.py`
 - batch queue
 - environment self-check
 - first-frame preview and subtitle position picking
@@ -32,12 +33,14 @@ Do not include yet:
 ```text
 Local-Video-Subtitle-Translator-MVP/
 |-- main.py
+|-- transcript.py
 |-- README.md
 |-- DISTRIBUTION_MVP.md
 |-- environment.yml
 |-- requirements.txt
 |-- install_env.bat
 |-- run_gui.bat
+|-- run_transcript.bat
 |-- scripts/
 |   |-- process_bilingual_subs.py
 |   |-- transcribe.py

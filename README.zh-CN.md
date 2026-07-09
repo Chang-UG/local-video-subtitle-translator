@@ -105,6 +105,20 @@ D:\anaconda3\envs\vibecoding\python.exe main.py
 D:\anaconda3\envs\vibecoding\python.exe main.py --gui
 ```
 
+打开轻量纯转写 GUI：
+
+```powershell
+D:\anaconda3\envs\vibecoding\python.exe transcript.py
+```
+
+或双击：
+
+```powershell
+run_transcript.bat
+```
+
+`transcript.py` 只在窗口里显示可复制的原文纯文本，不写 TXT、SRT 或 JSON 文件。
+
 从命令行运行完整流程：
 
 ```powershell

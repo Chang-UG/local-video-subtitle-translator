@@ -105,6 +105,20 @@ or:
 D:\anaconda3\envs\vibecoding\python.exe main.py --gui
 ```
 
+Open the lightweight transcript-only GUI:
+
+```powershell
+D:\anaconda3\envs\vibecoding\python.exe transcript.py
+```
+
+or double-click:
+
+```powershell
+run_transcript.bat
+```
+
+`transcript.py` shows a copyable plain source transcript in the window only. It does not write TXT, SRT, or JSON files.
+
 Run the full pipeline from the command line:
 
 ```powershell
