@@ -143,6 +143,7 @@ class TranscriptGui:
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.worker: threading.Thread | None = None
         self.last_segments: list[TranscriptSegment] = []
+        self.last_media_path: Path | None = initial_file
 
         self._style()
         self._build()
@@ -188,7 +189,7 @@ class TranscriptGui:
 
         controls = ttk.Frame(body, style="Panel.TFrame")
         controls.grid(row=1, column=0, sticky="ew", pady=(12, 10))
-        for col in range(9):
+        for col in range(10):
             controls.columnconfigure(col, weight=1)
 
         ttk.Label(controls, text="Language", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
@@ -244,11 +245,12 @@ class TranscriptGui:
         )
         self.run_button = ttk.Button(controls, text="Transcribe", style="Accent.TButton", command=self.start)
         self.run_button.grid(row=1, column=7, sticky="ew", padx=(0, 8))
-        ttk.Button(controls, text="Copy", command=self.copy_text).grid(row=1, column=8, sticky="ew")
+        ttk.Button(controls, text="Copy", command=self.copy_text).grid(row=1, column=8, sticky="ew", padx=(0, 8))
+        ttk.Button(controls, text="Save SRT", command=self.save_srt).grid(row=1, column=9, sticky="ew")
 
         ttk.Label(
             body,
-            text="Copyable source transcript only. No TXT, SRT, or JSON files are written.",
+            text="Copyable source transcript. Files are written only when Save SRT is clicked.",
             style="Muted.TLabel",
         ).grid(row=2, column=0, sticky="ew", pady=(0, 8))
         ttk.Label(body, textvariable=self.copy_status, style="Muted.TLabel").grid(row=3, column=0, sticky="ew")
@@ -282,6 +284,7 @@ class TranscriptGui:
         )
         if filename:
             self.file_path.set(filename)
+            self.last_media_path = Path(filename)
             self.copy_status.set("")
 
     def start(self) -> None:
@@ -302,6 +305,7 @@ class TranscriptGui:
 
         self.output.delete("1.0", "end")
         self.last_segments = []
+        self.last_media_path = media_path
         self.copy_status.set("")
         self.status.set("Loading model...")
         self.run_button.configure(state="disabled")
@@ -376,6 +380,27 @@ class TranscriptGui:
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         self.copy_status.set("Copied to clipboard")
+
+    def save_srt(self) -> None:
+        if not self.last_segments:
+            self.copy_status.set("Nothing to save")
+            messagebox.showinfo("No transcript", "Transcribe a file before saving SRT.")
+            return
+
+        initial_dir = str(self.last_media_path.parent) if self.last_media_path else str(Path.cwd())
+        initial_file = f"{self.last_media_path.stem}.srt" if self.last_media_path else "transcript.srt"
+        filename = filedialog.asksaveasfilename(
+            title="Save SRT",
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            defaultextension=".srt",
+            filetypes=[("SRT subtitles", "*.srt"), ("All files", "*.*")],
+        )
+        if not filename:
+            return
+        srt_text = format_segments(self.last_segments, "srt")
+        Path(filename).write_text(srt_text + ("\n" if srt_text else ""), encoding="utf-8")
+        self.copy_status.set(f"Saved SRT: {Path(filename).name}")
 
     def update_wrap(self) -> None:
         self.output.configure(wrap="word" if self.wrap_text.get() else "none")
