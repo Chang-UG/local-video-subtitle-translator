@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import queue
+import re
 import sys
 import threading
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ OUTPUT_FORMATS = {
     "Text + timestamps": "timestamps",
     "SRT format": "srt",
 }
+FORMAT_LABELS = {value: label for label, value in OUTPUT_FORMATS.items()}
 
 
 @dataclass
@@ -76,6 +78,22 @@ def format_segments(segments: list[TranscriptSegment], output_format: str) -> st
             for segment in cleaned
         )
     return "\n".join(segment.text.strip() for segment in cleaned)
+
+
+def strip_timestamp_prefix(line: str) -> str:
+    return re.sub(r"^\[[^\]]+]\s*", "", line).strip()
+
+
+def srt_from_edited_lines(segments: list[TranscriptSegment], lines: list[str]) -> str:
+    cleaned_segments = [segment for segment in segments if segment.text.strip()]
+    edited_lines = [line.strip() for line in lines if line.strip()]
+    updated_segments: list[TranscriptSegment] = []
+    for index, segment in enumerate(cleaned_segments):
+        text = edited_lines[index] if index < len(edited_lines) else segment.text
+        updated_segments.append(
+            TranscriptSegment(index=segment.index, start=segment.start, end=segment.end, text=text)
+        )
+    return format_segments(updated_segments, "srt")
 
 
 def transcribe_segments(
@@ -144,6 +162,8 @@ class TranscriptGui:
         self.worker: threading.Thread | None = None
         self.last_segments: list[TranscriptSegment] = []
         self.last_media_path: Path | None = initial_file
+        self.rendered_text = ""
+        self.rendered_output_format = "plain"
 
         self._style()
         self._build()
@@ -365,6 +385,8 @@ class TranscriptGui:
                     text = format_segments(segments, output_format)
                     self.output.delete("1.0", "end")
                     self.output.insert("1.0", text)
+                    self.rendered_text = text
+                    self.rendered_output_format = output_format
                     self.status.set(f"Done · {detected_language} ({probability:.1%})")
                     self.copy_status.set(f"{len(text)} characters")
                     self.run_button.configure(state="normal")
@@ -387,6 +409,31 @@ class TranscriptGui:
             messagebox.showinfo("No transcript", "Transcribe a file before saving SRT.")
             return
 
+        current_text = self.output.get("1.0", "end").strip()
+        current_format = OUTPUT_FORMATS[self.output_format_label.get()]
+        if not current_text:
+            self.copy_status.set("Nothing to save")
+            messagebox.showinfo("No text", "There is no transcript text to save.")
+            return
+
+        if current_format == "srt":
+            srt_text = current_text
+        else:
+            lines = current_text.splitlines()
+            if current_format == "timestamps":
+                lines = [strip_timestamp_prefix(line) for line in lines]
+            edited_count = len([line for line in lines if line.strip()])
+            segment_count = len([segment for segment in self.last_segments if segment.text.strip()])
+            if edited_count != segment_count:
+                proceed = messagebox.askyesno(
+                    "Line count changed",
+                    "The edited line count does not match the original segment count.\n\n"
+                    "Save by matching edited lines to the original timing in order?",
+                )
+                if not proceed:
+                    return
+            srt_text = srt_from_edited_lines(self.last_segments, lines)
+
         initial_dir = str(self.last_media_path.parent) if self.last_media_path else str(Path.cwd())
         initial_file = f"{self.last_media_path.stem}.srt" if self.last_media_path else "transcript.srt"
         filename = filedialog.asksaveasfilename(
@@ -398,7 +445,6 @@ class TranscriptGui:
         )
         if not filename:
             return
-        srt_text = format_segments(self.last_segments, "srt")
         Path(filename).write_text(srt_text + ("\n" if srt_text else ""), encoding="utf-8")
         self.copy_status.set(f"Saved SRT: {Path(filename).name}")
 
@@ -408,9 +454,22 @@ class TranscriptGui:
     def rerender_output(self, _event=None) -> None:
         if not self.last_segments:
             return
-        text = format_segments(self.last_segments, OUTPUT_FORMATS[self.output_format_label.get()])
+        current_text = self.output.get("1.0", "end").strip()
+        if current_text and current_text != self.rendered_text.strip():
+            proceed = messagebox.askyesno(
+                "Discard edits?",
+                "Changing the output format will re-render the transcript and replace your current edits.\n\n"
+                "Continue?",
+            )
+            if not proceed:
+                self.output_format_label.set(FORMAT_LABELS[self.rendered_output_format])
+                return
+        output_format = OUTPUT_FORMATS[self.output_format_label.get()]
+        text = format_segments(self.last_segments, output_format)
         self.output.delete("1.0", "end")
         self.output.insert("1.0", text)
+        self.rendered_text = text
+        self.rendered_output_format = output_format
         self.copy_status.set(f"{len(text)} characters")
 
     def run(self) -> None:
