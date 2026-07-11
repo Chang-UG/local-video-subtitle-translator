@@ -117,7 +117,7 @@ or double-click:
 run_transcript.bat
 ```
 
-`transcript.py` shows a copyable plain source transcript in the window only. It does not write TXT, SRT, or JSON files.
+`transcript.py` shows copyable source transcript text in the window only. You can choose plain text, timestamped text, or SRT-formatted text; it does not write TXT, SRT, or JSON files.
 
 Run the full pipeline from the command line:
 

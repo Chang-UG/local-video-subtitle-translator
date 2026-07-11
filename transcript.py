@@ -4,6 +4,7 @@ import argparse
 import queue
 import sys
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 from tkinter import BooleanVar, StringVar, Tk, filedialog, messagebox
 from tkinter import ttk
@@ -30,6 +31,76 @@ LANGUAGES = [
 LANGUAGE_LABELS = [f"{code} · {name}" for code, name in LANGUAGES]
 LANGUAGE_CODES = {label: code for label, (code, _name) in zip(LANGUAGE_LABELS, LANGUAGES)}
 
+OUTPUT_FORMATS = {
+    "Plain text": "plain",
+    "Text + timestamps": "timestamps",
+    "SRT format": "srt",
+}
+
+
+@dataclass
+class TranscriptSegment:
+    index: int
+    start: float
+    end: float
+    text: str
+
+
+def timestamp(seconds: float, *, srt: bool = False) -> str:
+    milliseconds = round(seconds * 1000)
+    hours, remainder = divmod(milliseconds, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    secs, millis = divmod(remainder, 1000)
+    separator = "," if srt else "."
+    return f"{hours:02}:{minutes:02}:{secs:02}{separator}{millis:03}"
+
+
+def format_segments(segments: list[TranscriptSegment], output_format: str) -> str:
+    cleaned = [segment for segment in segments if segment.text.strip()]
+    if output_format == "srt":
+        blocks = []
+        for segment in cleaned:
+            blocks.append(
+                "\n".join(
+                    [
+                        str(segment.index),
+                        f"{timestamp(segment.start, srt=True)} --> {timestamp(segment.end, srt=True)}",
+                        segment.text.strip(),
+                    ]
+                )
+            )
+        return "\n\n".join(blocks)
+    if output_format == "timestamps":
+        return "\n".join(
+            f"[{timestamp(segment.start)} --> {timestamp(segment.end)}] {segment.text.strip()}"
+            for segment in cleaned
+        )
+    return "\n".join(segment.text.strip() for segment in cleaned)
+
+
+def transcribe_segments(
+    media_path: Path,
+    *,
+    language: str,
+    model_size: str,
+    device: str,
+    compute_type: str,
+    beam_size: int,
+) -> tuple[list[TranscriptSegment], str, float]:
+    model = WhisperModel(model_size, device=device, compute_type=compute_type)
+    language_hint = None if language == "auto" else language
+    raw_segments, info = model.transcribe(
+        str(media_path),
+        language=language_hint,
+        beam_size=beam_size,
+        vad_filter=True,
+    )
+    segments = [
+        TranscriptSegment(index=index, start=segment.start, end=segment.end, text=segment.text.strip())
+        for index, segment in enumerate(raw_segments, start=1)
+    ]
+    return segments, info.language, info.language_probability
+
 
 def plain_transcript(
     media_path: Path,
@@ -40,16 +111,15 @@ def plain_transcript(
     compute_type: str,
     beam_size: int,
 ) -> tuple[str, str, float]:
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
-    language_hint = None if language == "auto" else language
-    segments, info = model.transcribe(
-        str(media_path),
-        language=language_hint,
+    segments, detected_language, probability = transcribe_segments(
+        media_path,
+        language=language,
+        model_size=model_size,
+        device=device,
+        compute_type=compute_type,
         beam_size=beam_size,
-        vad_filter=True,
     )
-    lines = [segment.text.strip() for segment in segments if segment.text.strip()]
-    return "\n".join(lines), info.language, info.language_probability
+    return format_segments(segments, "plain"), detected_language, probability
 
 
 class TranscriptGui:
@@ -66,11 +136,13 @@ class TranscriptGui:
         self.device = StringVar(value="cpu")
         self.compute_type = StringVar(value="int8")
         self.beam_size = StringVar(value="5")
+        self.output_format_label = StringVar(value="Plain text")
         self.status = StringVar(value="Ready")
         self.copy_status = StringVar(value="")
         self.wrap_text = BooleanVar(value=True)
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.worker: threading.Thread | None = None
+        self.last_segments: list[TranscriptSegment] = []
 
         self._style()
         self._build()
@@ -116,7 +188,7 @@ class TranscriptGui:
 
         controls = ttk.Frame(body, style="Panel.TFrame")
         controls.grid(row=1, column=0, sticky="ew", pady=(12, 10))
-        for col in range(8):
+        for col in range(9):
             controls.columnconfigure(col, weight=1)
 
         ttk.Label(controls, text="Language", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
@@ -156,16 +228,27 @@ class TranscriptGui:
         ttk.Label(controls, text="Beam", style="Muted.TLabel").grid(row=0, column=4, sticky="w")
         ttk.Entry(controls, textvariable=self.beam_size, width=6).grid(row=1, column=4, sticky="ew", padx=(0, 8))
 
+        ttk.Label(controls, text="Output", style="Muted.TLabel").grid(row=0, column=5, sticky="w")
+        output_combo = ttk.Combobox(
+            controls,
+            textvariable=self.output_format_label,
+            values=list(OUTPUT_FORMATS),
+            state="readonly",
+            width=16,
+        )
+        output_combo.grid(row=1, column=5, sticky="ew", padx=(0, 8))
+        output_combo.bind("<<ComboboxSelected>>", self.rerender_output)
+
         ttk.Checkbutton(controls, text="Wrap", variable=self.wrap_text, command=self.update_wrap).grid(
-            row=1, column=5, sticky="w", padx=(0, 8)
+            row=1, column=6, sticky="w", padx=(0, 8)
         )
         self.run_button = ttk.Button(controls, text="Transcribe", style="Accent.TButton", command=self.start)
-        self.run_button.grid(row=1, column=6, sticky="ew", padx=(0, 8))
-        ttk.Button(controls, text="Copy", command=self.copy_text).grid(row=1, column=7, sticky="ew")
+        self.run_button.grid(row=1, column=7, sticky="ew", padx=(0, 8))
+        ttk.Button(controls, text="Copy", command=self.copy_text).grid(row=1, column=8, sticky="ew")
 
         ttk.Label(
             body,
-            text="Plain source transcript only. No TXT, SRT, or JSON files are written.",
+            text="Copyable source transcript only. No TXT, SRT, or JSON files are written.",
             style="Muted.TLabel",
         ).grid(row=2, column=0, sticky="ew", pady=(0, 8))
         ttk.Label(body, textvariable=self.copy_status, style="Muted.TLabel").grid(row=3, column=0, sticky="ew")
@@ -218,6 +301,7 @@ class TranscriptGui:
             return
 
         self.output.delete("1.0", "end")
+        self.last_segments = []
         self.copy_status.set("")
         self.status.set("Loading model...")
         self.run_button.configure(state="disabled")
@@ -230,6 +314,7 @@ class TranscriptGui:
                 self.device.get(),
                 self.compute_type.get().strip() or "int8",
                 beam_size,
+                OUTPUT_FORMATS[self.output_format_label.get()],
             ),
             daemon=True,
         )
@@ -243,10 +328,11 @@ class TranscriptGui:
         device: str,
         compute_type: str,
         beam_size: int,
+        output_format: str,
     ) -> None:
         try:
             self.events.put(("status", "Transcribing..."))
-            text, detected_language, probability = plain_transcript(
+            segments, detected_language, probability = transcribe_segments(
                 media_path,
                 language=language,
                 model_size=model_size,
@@ -257,7 +343,7 @@ class TranscriptGui:
         except Exception as exc:
             self.events.put(("error", str(exc)))
             return
-        self.events.put(("done", (text, detected_language, probability)))
+        self.events.put(("done", (segments, output_format, detected_language, probability)))
 
     def _poll_events(self) -> None:
         try:
@@ -270,7 +356,9 @@ class TranscriptGui:
                     self.run_button.configure(state="normal")
                     messagebox.showerror("Transcription failed", str(payload))
                 elif event == "done":
-                    text, detected_language, probability = payload
+                    segments, output_format, detected_language, probability = payload
+                    self.last_segments = segments
+                    text = format_segments(segments, output_format)
                     self.output.delete("1.0", "end")
                     self.output.insert("1.0", text)
                     self.status.set(f"Done · {detected_language} ({probability:.1%})")
@@ -291,6 +379,14 @@ class TranscriptGui:
 
     def update_wrap(self) -> None:
         self.output.configure(wrap="word" if self.wrap_text.get() else "none")
+
+    def rerender_output(self, _event=None) -> None:
+        if not self.last_segments:
+            return
+        text = format_segments(self.last_segments, OUTPUT_FORMATS[self.output_format_label.get()])
+        self.output.delete("1.0", "end")
+        self.output.insert("1.0", text)
+        self.copy_status.set(f"{len(text)} characters")
 
     def run(self) -> None:
         self.root.mainloop()

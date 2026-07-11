@@ -117,7 +117,7 @@ D:\anaconda3\envs\vibecoding\python.exe transcript.py
 run_transcript.bat
 ```
 
-`transcript.py` 只在窗口里显示可复制的原文纯文本，不写 TXT、SRT 或 JSON 文件。
+`transcript.py` 只在窗口里显示可复制的原文转写，可选择纯文本、带时间戳文本或 SRT 格式文本；不写 TXT、SRT 或 JSON 文件。
 
 从命令行运行完整流程：
 
